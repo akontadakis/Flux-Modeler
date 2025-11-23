@@ -1,8 +1,8 @@
-# Energy Modeler △
+# Flux Modeler △
 
 > **Editor's Note:** Please consider this a **beta version**. The intent is to improve it over time, but many features have not been extensively tested. If you run into a bug, your feedback would be greatly appreciated!
 
-Energy Modeler is a comprehensive desktop application providing a graphical user interface (GUI) for **EnergyPlus** building simulations. Integrated with an AI Assistant, it streamlines the entire building performance workflow—from 3D modeling to energy simulations, all the way to results visualization and compliance reporting.
+Flux Modeler is a comprehensive desktop application providing a graphical user interface (GUI) for **EnergyPlus** building simulations. Integrated with an AI Assistant, it streamlines the entire building performance workflow—from 3D modeling to energy simulations, all the way to results visualization and compliance reporting.
 
 ![Energy Modeler Welcome Screen](./Pictures/welcome_screen.png)
 
@@ -45,41 +45,41 @@ Energy Modeler is a comprehensive desktop application providing a graphical user
 
 ## 🚀 Getting Started
 
-To use Energy Modeler, you need a modern web browser and a local installation of EnergyPlus. The desktop version (recommended) offers the best experience.
+To use Flux Modeler, you need a modern web browser and a local installation of EnergyPlus. The desktop version (recommended) offers the best experience.
 
 1. **Install Required Software**:
 
-   - **EnergyPlus**: Download and install [EnergyPlus](https://energyplus.net/) from the official website. The application supports EnergyPlus 9.0 and later versions.
+   - **EnergyPlus**: Download and install [EnergyPlus](https://energyplus.net/) from the official website. The application supports EnergyPlus 25.1 and later versions.
 
-2. **Download Energy Modeler**:
+2. **Download Flux Modeler**:
    Download the latest release for your operating system (macOS or Windows) from the project's Releases page.
 
 3. **Run the Application**:
-   - *Windows*: Run the Energy Modeler Setup `.exe` installer.
-   - *macOS*: Open the Energy Modeler `.dmg` and drag the application to your Applications folder.
+   - *Windows*: Run the Flux Modeler Setup `.exe` installer.
+   - *macOS*: Open the Flux Modeler `.dmg` and drag the application to your Applications folder.
 
 **Security Warnings on First Launch**:
 
-Because the app isn't code-signed, your OS might show a security warning. When a user on a Mac downloads and tries to open the unsigned app, they will be stopped by Gatekeeper, which will show a message like "Energy Modeler cannot be opened because the developer cannot be verified."
+Because the app isn't code-signed, your OS might show a security warning. When a user on a Mac downloads and tries to open the unsigned app, they will be stopped by Gatekeeper, which will show a message like "Flux Modeler cannot be opened because the developer cannot be verified."
 
 - **On Windows (SmartScreen)**: Click "**More info**", then click "**Run anyway**".
 
-- **On macOS (Gatekeeper)**: **Right-click** (or Control-click) the app icon, select "**Open**" from the menu. A new dialog box will appear that is similar to the first one, but this time it will include an "**Open**" button. Clicking this will run the app. You only need to do this once. After the first successful launch, the app can be opened normally by double-clicking it. Or After you drag Energy Modeler.app to the Applications folder, do the following:
+- **On macOS (Gatekeeper)**: **Right-click** (or Control-click) the app icon, select "**Open**" from the menu. A new dialog box will appear that is similar to the first one, but this time it will include an "**Open**" button. Clicking this will run the app. You only need to do this once. After the first successful launch, the app can be opened normally by double-clicking it. Or After you drag Flux Modeler.app to the Applications folder, do the following:
 
 - Open the Terminal app.
 - Copy and paste the following command exactly, then press Enter:
 
 ```bash
-xattr -cr /Applications/Energy\ Modeler.app
+xattr -cr /Applications/Flux\ Modeler.app
 ```
 
 ---
 
 ## ✨ Core Capabilities
 
-Energy Modeler provides comprehensive to model energy consumption—for heating, cooling, ventilation, lighting and plug and process loads:
+Flux Modeler provides comprehensive to model energy consumption—for heating, cooling, ventilation, lighting and plug and process loads:
 
-### EnergyPlus Energy Simulation
+### EnergyPlus Simulation
 
 - **Complete Building Energy Modeling**: Integration with EnergyPlus for whole-building energy analysis, including heating, cooling, ventilation, and lighting energy consumption.
 
@@ -109,7 +109,7 @@ Energy Modeler provides comprehensive to model energy consumption—for heating,
 
 - **Interior Furniture Library**: Place simple furniture and partition objects from a pre-built library via drag-and-drop or import custom `.obj` assets.
 
-- **File System Integration**: Using the File System Access API (or Electron's APIs), Energy Modeler can directly read from and save to a local project folder, enabling a seamless desktop-like experience.
+- **File System Integration**: Using the File System Access API (or Electron's APIs), Flux Modeler can directly read from and save to a local project folder, enabling a seamless desktop-like experience.
   
 - **AI Assistant (Helios)**: An integrated, context-aware AI chat powered by generative AI (Google Gemini, Anthropic, OpenAI, OpenRouter models) to help answer questions and directly manipulate the scene, run simulations, and control the UI using natural language commands.
 
@@ -125,7 +125,7 @@ Energy Modeler provides comprehensive to model energy consumption—for heating,
 
 ## ⚡ EnergyPlus Integration
 
-The EnergyPlus integration brings professional whole-building energy modeling directly into the Energy Modeler workflow. The application generates complete IDF (Input Data File) models from your 3D geometry and runs EnergyPlus simulations to analyze heating, cooling, and lighting energy consumption.
+The EnergyPlus integration brings professional whole-building energy modeling directly into the Flux Modeler workflow. The application generates complete IDF (Input Data File) models from your 3D geometry and runs EnergyPlus simulations to analyze heating, cooling, and lighting energy consumption.
 
 ### Architecture & Workflow
 
@@ -298,7 +298,7 @@ You can get a free API key for the Gemini family of models from [Google AI Studi
 3. Click the "`Get API key`" button, usually located in the top-left or top-right corner of the page.
 4. A dialog will appear. Click "`Create API key`".
 5. Your new API key will be generated and displayed.
-6. Copy this key and paste it into the API Key field in the Energy Modeler AI settings.
+6. Copy this key and paste it into the API Key field in the Flux Modeler AI settings.
 *Note*: The Gemini API has a free tier with usage limits. Be sure to review Google's current pricing and terms of service.
 
 #### OpenRouter API Key 🔑
@@ -308,15 +308,15 @@ OpenRouter provides access to a wide variety of models from different providers 
 1. Go to the [OpenRouter.ai](https://openrouter.ai/) website and log in.
 2. Click on your account icon in the top-right corner and select "`Keys`" from the dropdown menu.
 3. Click the "`+ Create Key`" button. Give your key a name (e.g., "EnergyModeler") and click "`Create`".Your new API key will be generated.
-4. Copy this key and paste it into the API Key field in the Energy Modeler AI settings.
+4. Copy this key and paste it into the API Key field in the Flux Modeler AI settings.
 *Note*: OpenRouter is a paid service. You will need to add credits to your account to use most models. To use some of the free models, you may need to adjust your privacy settings to allow your data to be used for model improvement.
 
 #### OpenAI API Key 🔑
 
 1. Go to the [OpenAI API keys](https://platform.openai.com/api-keys) page and log in.
 2. Click the "`+ Create new secret key`" button.
-3. Give your key a name (e.g., "EnergyModeler") and click "`Create secret key`".
-4. Copy the generated key immediately and paste it into the API Key field in the Energy Modeler AI settings. You will not be able to view it again.
+3. Give your key a name (e.g., "FluxModeler") and click "`Create secret key`".
+4. Copy the generated key immediately and paste it into the API Key field in the Flux Modeler AI settings. You will not be able to view it again.
 
 #### Anthropic API Key 🔑
 
@@ -324,7 +324,7 @@ OpenRouter provides access to a wide variety of models from different providers 
 2. Navigate to the "API Keys" section in your account settings.
 3. Click the "`Create Key`" button.
 4. Give the key a name and click "`Create Key`".
-5. Copy the key and paste it into the API Key field in the Energy Modeler AI settings.
+5. Copy the key and paste it into the API Key field in the Flux Modeler AI settings.
 
 **Important**: Treat your API keys like passwords. Do not share them publicly or commit them to version control.
 
@@ -332,9 +332,9 @@ OpenRouter provides access to a wide variety of models from different providers 
 
 The interface is designed around a logical workflow, guiding the user from setup to analysis.
 
-![Energy Modeler Main UI](./Pictures/main_ui.png)
-![Energy Modeler Main UI](./Pictures/main_ui_quad.png)
-![Energy Modeler Panels](./Pictures/panels_ui.png)
+![Flux Modeler Main UI](./Pictures/main_ui.png)
+![Flux Modeler Main UI](./Pictures/main_ui_quad.png)
+![Flux Modeler Panels](./Pictures/panels_ui.png)
 
 - **3D Viewport (Center)**: This is the main interactive area where your 3D scene is displayed. You can navigate using standard orbit controls (mouse drag, scroll). The viewport can also be split into a **Quad View** layout, showing synchronized Perspective, Top, Front, and Side cameras for comprehensive spatial awareness.
 
@@ -351,7 +351,7 @@ The interface is designed around a logical workflow, guiding the user from setup
 
 ### Desktop Integration (Electron)
 
-Energy Modeler operates as an Electron-based desktop application, enabling direct interaction with your file system.
+Flux Modeler operates as an Electron-based desktop application, enabling direct interaction with your file system.
 
 - **Standardized Project Folder**: When you save a project, the application creates a complete, organized folder structure on your local machine, with separate directories for geometry, materials, weather files, scripts, and results.
 
