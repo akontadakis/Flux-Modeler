@@ -47,148 +47,111 @@ const recipes = {
 
 function initializeEnergyPlusSidebar() {
     dom = getDom();
-    const panel = dom['panel-energyplus'] || document.getElementById('panel-energyplus');
-    if (!panel) return;
 
-    let content = panel.querySelector('.window-content');
-    if (!content) {
-        content = document.createElement('div');
-        content.className = 'window-content';
-        panel.appendChild(content);
-    }
-
-    // Unified layout for the EnergyPlus sidebar (match global app style)
-    content.innerHTML = `
-        <div class="window-content-inner">
-            <!-- Simulation Checklist -->
-            <section class="param-section">
-                <div class="label">Simulation Checklist</div>
-                <div class="panel-subtle" data-role="simulation-checklist-body">
-                    <div class="data-value">Evaluating project...</div>
-                </div>
-                <div style="margin-top: 0.35rem; display: flex; justify-content: flex-end;">
-                    <button class="btn btn-xxs btn-secondary" data-action="refresh-simulation-checklist">
-                        Refresh
-                    </button>
-                </div>
-            </section>
-
-            <!-- Simulation Recipes -->
-            <section class="param-section">
-                <div class="label">Run Simulation</div>
-                <div class="recipe-list"></div>
-            </section>
-
-            <!-- Configuration Shortcuts -->
-            <section class="param-section">
-                <div class="label">Configuration</div>
-                <div class="param-grid-sim">
-                    <button class="btn btn-sm btn-secondary" data-action="open-materials-manager">Materials</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-constructions-manager">Constructions</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-schedules-manager">Schedules</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-zone-loads-manager">Zone Loads</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-ideal-loads-manager">Thermostats</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-weather-location-manager">Weather</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-daylighting-manager">Daylighting</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-outputs-manager">Outputs</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-hvac-sizing-manager">HVAC Sizing</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-outdoor-air-manager">Outdoor Air & Ventilation</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-shading-manager">Shading & Solar Control</button>
-                    <button class="btn btn-sm btn-secondary" data-action="open-simulation-control-manager">Simulation Control</button>
-                </div>
-            </section>
-
-            <p class="info-box" style="margin-top: 0.75rem;">
-                <strong>HVAC scope:</strong> Ray-Modeler generates models using
-                <code>ZoneHVAC:IdealLoadsAirSystem</code>. Detailed Air/PlantLoop systems are not generated.
-            </p>
-        </div>
-    `;
-
-    // Wire up all controls after rendering the new layout
-
-    const checklistContainer = content.querySelector('[data-role="simulation-checklist-body"]');
-    if (checklistContainer) {
-        renderSimulationChecklist(checklistContainer);
-    }
-
-    const checklistRefreshBtn = content.querySelector('[data-action="refresh-simulation-checklist"]');
-    if (checklistRefreshBtn && checklistContainer) {
-        checklistRefreshBtn.addEventListener('click', () => {
-            renderSimulationChecklist(checklistContainer);
-        });
-    }
-
-    populateRecipeList();
-
-    // Delegated click handler for the configuration buttons
-    content.addEventListener('click', async (ev) => {
-        const btn = ev.target.closest('button[data-action]');
-        if (!btn) return;
-
-        const action = btn.dataset.action;
-        const actions = {
-            'open-materials-manager': openMaterialsManagerPanel,
-            'open-constructions-manager': openConstructionsManagerPanel,
-            'open-schedules-manager': openSchedulesManagerPanel,
-            'open-zone-loads-manager': openZoneLoadsManagerPanel,
-            'open-ideal-loads-manager': openIdealLoadsManagerPanel,
-            'open-daylighting-manager': openDaylightingManagerPanel,
-            'open-outputs-manager': openOutputsManagerPanel,
-            'open-hvac-sizing-manager': openHvacSizingManagerPanel,
-            'open-outdoor-air-manager': openOutdoorAirManagerPanel,
-            'open-weather-location-manager': openWeatherLocationManagerPanel,
-            'open-shading-manager': openShadingManagerPanel,
-            'open-simulation-control-manager': openSimulationControlManagerPanel,
-        };
-
-        if (actions[action]) {
-            actions[action]();
+    // --- 1. Simulation Checklist Panel ---
+    const checklistPanel = dom['panel-checklist'] || document.getElementById('panel-checklist');
+    if (checklistPanel) {
+        let content = checklistPanel.querySelector('.window-content');
+        if (!content) {
+            content = document.createElement('div');
+            content.className = 'window-content';
+            checklistPanel.appendChild(content);
         }
-    });
+        content.innerHTML = `
+            <div class="window-content-inner">
+                <section class="param-section">
+                    <div class="panel-subtle" data-role="simulation-checklist-body">
+                        <div class="data-value">Evaluating project...</div>
+                    </div>
+                    <div style="margin-top: 0.35rem; display: flex; justify-content: flex-end;">
+                        <button class="btn btn-xxs btn-secondary" data-action="refresh-simulation-checklist">
+                            Refresh
+                        </button>
+                    </div>
+                </section>
+            </div>
+        `;
 
-    // Checklist delegated actions
-    const checklistBody = content.querySelector('[data-role="simulation-checklist-body"]');
-    if (checklistBody) {
-        checklistBody.addEventListener('click', async (ev) => {
-            const btn = ev.target.closest('[data-checklist-action]');
-            if (!btn) return;
-            ev.stopPropagation(); // Prevent content click handler from firing
-            const action = btn.getAttribute('data-checklist-action');
+        const checklistContainer = content.querySelector('[data-role="simulation-checklist-body"]');
+        if (checklistContainer) {
+            renderSimulationChecklist(checklistContainer);
+        }
 
-            try {
-                const checklistActions = {
-                    'open-diagnostics': openDiagnosticsPanel,
-                    'open-materials': openMaterialsManagerPanel,
-                    'open-constructions': openConstructionsManagerPanel,
-                    'open-schedules': openSchedulesManagerPanel,
-                    'open-zone-loads': openZoneLoadsManagerPanel,
-                    'open-ideal-loads': openIdealLoadsManagerPanel,
-                    'open-daylighting': openDaylightingManagerPanel,
-                    'open-outputs': openOutputsManagerPanel,
-                    'open-weather-location': openWeatherLocationManagerPanel,
-                    'open-sim-control': openSimulationControlManagerPanel,
-                    'open-annual': () => openRecipePanel(recipes['Annual Energy Simulation']),
-                    'open-heating-dd': () => openRecipePanel(recipes['Heating Design Day']),
-                    'open-cooling-dd': () => openRecipePanel(recipes['Cooling Design Day']),
-                };
+        const checklistRefreshBtn = content.querySelector('[data-action="refresh-simulation-checklist"]');
+        if (checklistRefreshBtn && checklistContainer) {
+            checklistRefreshBtn.addEventListener('click', () => {
+                renderSimulationChecklist(checklistContainer);
+            });
+        }
 
-                if (checklistActions[action]) {
-                    await Promise.resolve(checklistActions[action]());
-                } else if (action === 'generate-idf') {
-                    const { generateAndStoreIdf } = await import('./energyplus.js');
-                    await generateAndStoreIdf();
-                    alert('IDF generated and stored as model.idf');
-                    if (checklistContainer) {
-                        renderSimulationChecklist(checklistContainer);
+        // Checklist delegated actions
+        const checklistBody = content.querySelector('[data-role="simulation-checklist-body"]');
+        if (checklistBody) {
+            checklistBody.addEventListener('click', async (ev) => {
+                const btn = ev.target.closest('[data-checklist-action]');
+                if (!btn) return;
+                ev.stopPropagation();
+                const action = btn.getAttribute('data-checklist-action');
+
+                try {
+                    const checklistActions = {
+                        'open-diagnostics': openDiagnosticsPanel,
+                        'open-materials': openMaterialsManagerPanel,
+                        'open-constructions': openConstructionsManagerPanel,
+                        'open-schedules': openSchedulesManagerPanel,
+                        'open-zone-loads': openZoneLoadsManagerPanel,
+                        'open-ideal-loads': openIdealLoadsManagerPanel,
+                        'open-daylighting': openDaylightingManagerPanel,
+                        'open-outputs': openOutputsManagerPanel,
+                        'open-weather-location': openWeatherLocationManagerPanel,
+                        'open-sim-control': openSimulationControlManagerPanel,
+                        'open-annual': () => openRecipePanel(recipes['Annual Energy Simulation']),
+                        'open-heating-dd': () => openRecipePanel(recipes['Heating Design Day']),
+                        'open-cooling-dd': () => openRecipePanel(recipes['Cooling Design Day']),
+                    };
+
+                    if (checklistActions[action]) {
+                        await Promise.resolve(checklistActions[action]());
+                    } else if (action === 'generate-idf') {
+                        const { generateAndStoreIdf } = await import('./energyplus.js');
+                        await generateAndStoreIdf();
+                        alert('IDF generated and stored as model.idf');
+                        if (checklistContainer) {
+                            renderSimulationChecklist(checklistContainer);
+                        }
                     }
+                } catch (err) {
+                    console.error('Simulation Checklist action failed:', err);
+                    alert('Simulation Checklist action failed. Check console for details.');
                 }
-            } catch (err) {
-                console.error('Simulation Checklist action failed:', err);
-                alert('Simulation Checklist action failed. Check console for details.');
-            }
-        });
+            });
+        }
     }
+
+    // --- 2. Run Simulation Panel ---
+    const runPanel = dom['panel-run'] || document.getElementById('panel-run');
+    if (runPanel) {
+        let content = runPanel.querySelector('.window-content');
+        if (!content) {
+            content = document.createElement('div');
+            content.className = 'window-content';
+            runPanel.appendChild(content);
+        }
+        content.innerHTML = `
+            <div class="window-content-inner">
+                <section class="param-section">
+                    <div class="recipe-list"></div>
+                </section>
+                <p class="info-box" style="margin-top: 0.75rem;">
+                    <strong>HVAC scope:</strong> Ray-Modeler generates models using
+                    <code>ZoneHVAC:IdealLoadsAirSystem</code>. Detailed Air/PlantLoop systems are not generated.
+                </p>
+            </div>
+        `;
+        populateRecipeList();
+    }
+
+
 }
 
 /**
@@ -575,7 +538,7 @@ function renderSimulationChecklist(container) {
 }
 
 function populateRecipeList() {
-    const recipeList = dom['panel-energyplus']?.querySelector('.recipe-list');
+    const recipeList = dom['panel-run']?.querySelector('.recipe-list');
     if (!recipeList) return;
 
     recipeList.innerHTML = '';
@@ -6872,7 +6835,7 @@ function createShadingManagerPanel() {
                 </div>
             </td>
             <td class="px-1 py-1 align-top">
-                <input type="number" step="0.05" min="0" max="1" class="w-full"
+                    <input type="number" step="0.05" min="0" max="1" class="w-full"
                     data-field="glareFrac" placeholder="0-1">
             </td>
             <td class="px-1 py-1 align-top">
@@ -8024,870 +7987,7 @@ function createOutputsManagerPanel() {
  *  - RunPeriodControl:DaylightSavingTime
  * Values stored in energyPlusConfig.simulationControl.
  */
-function openWeatherLocationManagerPanel() {
-    const panelId = 'panel-energyplus-weather-location';
-    let panel = document.getElementById(panelId);
-    if (!panel) {
-        panel = createWeatherLocationManagerPanel();
-        document.getElementById('window-container').appendChild(panel);
-    }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
-}
 
-/**
- * Weather & Location Manager
- * Canonical project-level weather configuration:
- *   energyPlusConfig.weather = {
- *     epwPath?: string,
- *     locationSource?: 'FromEPW' | 'Custom',
- *     customLocation?: {
- *       name: string,
- *       latitude: number,
- *       longitude: number,
- *       timeZone: number,
- *       elevation: number
- *     }
- *   }
- *
- * Backwards compatibility:
- *   - If ep.weatherFilePath exists and weather.epwPath is missing, it is shown as selected EPW.
- */
-function createWeatherLocationManagerPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'panel-energyplus-weather-location';
-    panel.className = 'floating-window ui-panel resizable-panel';
-
-    const { meta, ep, weather } = getWeatherConfig();
-
-    const locationSource = weather.locationSource || 'FromEPW';
-    const epwPath = weather.epwPath || ep.weatherFilePath || '';
-    const cl = weather.customLocation || {};
-
-    panel.innerHTML = `
-        <div class="window-header">
-            <span>Weather & Location</span>
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
-            </div>
-        </div>
-        <div class="window-content space-y-3 text-xs">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure the project-level EnergyPlus weather file (EPW) and location strategy.
-                This configuration is used when generating IDFs and running simulations.
-            </p>
-
-            <!-- Project EPW selection -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex items-center justify-between">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Project Weather File (EPW)
-                    </span>
-                </div>
-                <div class="flex items-center gap-2 mt-1">
-                    <input
-                        type="text"
-                        class="w-full text-xs"
-                        data-field="epw-path"
-                        value="${epwPath || ''}"
-                        placeholder="No EPW selected"
-                        readonly
-                    >
-                    <button class="btn btn-xxs btn-secondary" data-action="select-epw">
-                        Select EPW
-                    </button>
-                    <button class="btn btn-xxs btn-secondary" data-action="clear-epw">
-                        Clear
-                    </button>
-                </div>
-                <div class="text-xs text-[--text-secondary] mt-1">
-                    The selected EPW is stored in <code>energyPlusConfig.weather.epwPath</code>.
-                    If not set, annual simulations will fail validation.
-                </div>
-                <div class="text-xs text-yellow-300" data-role="epw-warning" style="${epwPath ? 'display:none;' : ''}">
-                    No EPW is currently configured.
-                </div>
-            </div>
-
-            <!-- Location source -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                    Location Source
-                </div>
-                <div class="flex flex-col gap-1 mt-1">
-                    <label class="inline-flex items-center gap-1">
-                        <input type="radio" name="loc-source" value="FromEPW" data-field="loc-from-epw" ${locationSource === 'Custom' ? '' : 'checked'}>
-                        <span class="text-xs">From EPW (recommended)</span>
-                    </label>
-                    <label class="inline-flex items-center gap-1">
-                        <input type="radio" name="loc-source" value="Custom" data-field="loc-custom" ${locationSource === 'Custom' ? 'checked' : ''}>
-                        <span class="text-xs">Custom location (advanced)</span>
-                    </label>
-                </div>
-                <div class="mt-2 grid grid-cols-5 gap-1 text-xs" data-role="custom-location-fields" style="${locationSource === 'Custom' ? '' : 'display:none;'}">
-                    <div>
-                        <label class="label !text-xs">Name</label>
-                        <input class="w-full" data-field="cl-name" value="${cl.name || ''}" placeholder="MySite">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Lat (°)</label>
-                        <input type="number" step="0.01" class="w-full" data-field="cl-lat" value="${cl.latitude ?? ''}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Lon (°)</label>
-                        <input type="number" step="0.01" class="w-full" data-field="cl-lon" value="${cl.longitude ?? ''}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">TZ (hr)</label>
-                        <input type="number" step="0.1" class="w-full" data-field="cl-tz" value="${cl.timeZone ?? ''}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Elev (m)</label>
-                        <input type="number" step="0.1" class="w-full" data-field="cl-elev" value="${cl.elevation ?? ''}">
-                    </div>
-                </div>
-                <div class="text-xs text-[--text-secondary] mt-1">
-                    When using "Custom location", these values override EPW-derived location for IDF generation.
-                    All fields are required for a valid custom location.
-                </div>
-            </div>
-
-            <div class="flex justify-end">
-                <button class="btn btn-xxs btn-secondary" data-action="save-weather-location">
-                    Save Weather & Location
-                </button>
-            </div>
-        </div>
-    `;
-
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
-    } else {
-        const closeButton = panel.querySelector('.window-icon-close');
-        if (closeButton) {
-            closeButton.onclick = () => panel.classList.add('hidden');
-        }
-    }
-
-    const selectBtn = panel.querySelector('[data-action="select-epw"]');
-    const clearBtn = panel.querySelector('[data-action="clear-epw"]');
-    const saveBtn = panel.querySelector('[data-action="save-weather-location"]');
-    const epwInput = panel.querySelector('[data-field="epw-path"]');
-    const epwWarning = panel.querySelector('[data-role="epw-warning"]');
-    const locFromEpwRadio = panel.querySelector('[data-field="loc-from-epw"]');
-    const locCustomRadio = panel.querySelector('[data-field="loc-custom"]');
-    const customFields = panel.querySelector('[data-role="custom-location-fields"]');
-
-    function setEpwPath(path) {
-        if (!epwInput) return;
-        epwInput.value = path || '';
-        if (epwWarning) {
-            epwWarning.style.display = path ? 'none' : '';
-        }
-    }
-
-    if (selectBtn) {
-        selectBtn.addEventListener('click', async () => {
-            // Prefer Electron dialog when available
-            if (window.electronAPI && typeof window.electronAPI.openFileDialog === 'function') {
-                try {
-                    const result = await window.electronAPI.openFileDialog({
-                        filters: [{ name: 'EPW files', extensions: ['epw'] }],
-                    });
-                    if (result && result.filePaths && result.filePaths[0]) {
-                        setEpwPath(result.filePaths[0]);
-                    }
-                } catch (err) {
-                    console.error('Weather & Location: EPW selection failed', err);
-                    alert('Failed to select EPW via Electron. Check console for details.');
-                }
-            } else {
-                // Browser-only fallback: use an <input type="file"> just to capture the name.
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.epw';
-                input.onchange = () => {
-                    const file = input.files && input.files[0];
-                    if (file) {
-                        // In browser builds we cannot rely on absolute paths; store the name as a hint.
-                        setEpwPath(file.path || file.name);
-                    }
-                };
-                input.click();
-            }
-        });
-    }
-
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            setEpwPath('');
-        });
-    }
-
-    function updateLocationSourceUI() {
-        if (!locCustomRadio || !locFromEpwRadio || !customFields) return;
-        const useCustom = locCustomRadio.checked;
-        customFields.style.display = useCustom ? '' : 'none';
-    }
-
-    if (locFromEpwRadio) {
-        locFromEpwRadio.addEventListener('change', updateLocationSourceUI);
-    }
-    if (locCustomRadio) {
-        locCustomRadio.addEventListener('change', updateLocationSourceUI);
-    }
-    updateLocationSourceUI();
-
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                const { meta: m0, ep: ep0 } = getWeatherConfig();
-
-                const nextWeather = {};
-
-                // EPW path
-                const epw = (epwInput?.value || '').trim();
-                if (epw) {
-                    nextWeather.epwPath = epw;
-                }
-
-                // Location source
-                const useCustom = locCustomRadio && locCustomRadio.checked;
-                nextWeather.locationSource = useCustom ? 'Custom' : 'FromEPW';
-
-                if (useCustom) {
-                    const name = (panel.querySelector('[data-field="cl-name"]')?.value || '').trim();
-                    const lat = parseFloat(panel.querySelector('[data-field="cl-lat"]')?.value || '');
-                    const lon = parseFloat(panel.querySelector('[data-field="cl-lon"]')?.value || '');
-                    const tz = parseFloat(panel.querySelector('[data-field="cl-tz"]')?.value || '');
-                    const elev = parseFloat(panel.querySelector('[data-field="cl-elev"]')?.value || '');
-
-                    if (
-                        !name ||
-                        !Number.isFinite(lat) ||
-                        lat < -90 ||
-                        lat > 90 ||
-                        !Number.isFinite(lon) ||
-                        lon < -180 ||
-                        lon > 180 ||
-                        !Number.isFinite(tz) ||
-                        tz < -12 ||
-                        tz > 14 ||
-                        !Number.isFinite(elev)
-                    ) {
-                        alert(
-                            'Custom location is incomplete or invalid. Please fill all fields (name, lat, lon, tz, elev) with valid values.'
-                        );
-                        return;
-                    }
-
-                    nextWeather.customLocation = {
-                        name,
-                        latitude: lat,
-                        longitude: lon,
-                        timeZone: tz,
-                        elevation: elev,
-                    };
-                }
-
-                const nextEP = {
-                    ...ep0,
-                    weather: nextWeather,
-                };
-
-                if (typeof project.updateMetadata === 'function') {
-                    project.updateMetadata({
-                        ...m0,
-                        energyPlusConfig: nextEP,
-                    });
-                } else {
-                    project.metadata = {
-                        ...(project.metadata || m0),
-                        energyPlusConfig: nextEP,
-                    };
-                }
-
-                alert('Weather & Location configuration saved.');
-            } catch (err) {
-                console.error('Weather & Location: save failed', err);
-                alert('Failed to save Weather & Location configuration. Check console for details.');
-            }
-        });
-    }
-
-    return panel;
-}
-
-function getWeatherConfig() {
-    const meta =
-        (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-        project.metadata ||
-        {};
-    const ep = meta.energyPlusConfig || meta.energyplus || {};
-    const weather = ep.weather || {};
-    return { meta, ep, weather };
-}
-
-function openSimulationControlManagerPanel() {
-    const panelId = 'panel-energyplus-sim-control';
-    let panel = document.getElementById(panelId);
-    if (!panel) {
-        panel = createSimulationControlManagerPanel();
-        document.getElementById('window-container').appendChild(panel);
-    }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
-}
-
-function getSimulationControlConfig() {
-    const meta =
-        (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-        project.metadata ||
-        {};
-    const ep = meta.energyPlusConfig || meta.energyplus || {};
-    const sc = ep.simulationControl || {};
-
-    const withDefaults = {
-        building: {
-            name: sc.building?.name ?? 'OfficeBuilding',
-            northAxis: sc.building?.northAxis ?? 0.0,
-            terrain: sc.building?.terrain ?? 'City',
-            loadsTolerance: sc.building?.loadsTolerance ?? 0.04,
-            tempTolerance: sc.building?.tempTolerance ?? 0.4,
-            solarDistribution: sc.building?.solarDistribution ?? 'FullInteriorAndExteriorWithReflections',
-            maxWarmupDays: sc.building?.maxWarmupDays ?? 25,
-            minWarmupDays: sc.building?.minWarmupDays ?? 6,
-        },
-        timestep: {
-            timestepsPerHour: sc.timestep?.timestepsPerHour ?? 4,
-        },
-        simulationControlFlags: {
-            doZoneSizing: sc.simulationControlFlags?.doZoneSizing ?? false,
-            doSystemSizing: sc.simulationControlFlags?.doSystemSizing ?? false,
-            doPlantSizing: sc.simulationControlFlags?.doPlantSizing ?? false,
-            runSizingPeriods: sc.simulationControlFlags?.runSizingPeriods ?? true,
-            runWeatherRunPeriods: sc.simulationControlFlags?.runWeatherRunPeriods ?? true,
-        },
-        globalGeometryRules: {
-            startingVertexPosition: sc.globalGeometryRules?.startingVertexPosition ?? 'UpperLeftCorner',
-            vertexEntryDirection: sc.globalGeometryRules?.vertexEntryDirection ?? 'Counterclockwise',
-            coordinateSystem: sc.globalGeometryRules?.coordinateSystem ?? 'Relative',
-        },
-        shadowCalculation: {
-            calculationFrequency: sc.shadowCalculation?.calculationFrequency ?? 10,
-            maxFigures: sc.shadowCalculation?.maxFigures ?? 15000,
-            algorithm: sc.shadowCalculation?.algorithm ?? 'ConvexWeilerAtherton',
-            skyDiffuseModel: sc.shadowCalculation?.skyDiffuseModel ?? 'SimpleSkyDiffuseModeling',
-        },
-        surfaceConvection: {
-            insideAlgorithm: sc.surfaceConvection?.insideAlgorithm ?? 'TARP',
-            outsideAlgorithm: sc.surfaceConvection?.outsideAlgorithm ?? 'DOE-2',
-        },
-        heatBalanceAlgorithm: {
-            algorithm: sc.heatBalanceAlgorithm?.algorithm ?? 'ConductionTransferFunction',
-            surfaceTempUpperLimit: sc.heatBalanceAlgorithm?.surfaceTempUpperLimit ?? 200,
-            hConvMin: sc.heatBalanceAlgorithm?.hConvMin ?? 0.1,
-            hConvMax: sc.heatBalanceAlgorithm?.hConvMax ?? 1000,
-        },
-        sizingPeriodWeatherFileDays: {
-            name: sc.sizingPeriodWeatherFileDays?.name ?? 'Sizing',
-            beginMonth: sc.sizingPeriodWeatherFileDays?.beginMonth ?? 1,
-            beginDayOfMonth: sc.sizingPeriodWeatherFileDays?.beginDayOfMonth ?? 1,
-            endMonth: sc.sizingPeriodWeatherFileDays?.endMonth ?? 12,
-            endDayOfMonth: sc.sizingPeriodWeatherFileDays?.endDayOfMonth ?? 31,
-            useWeatherFileDaylightSaving: sc.sizingPeriodWeatherFileDays?.useWeatherFileDaylightSaving ?? true,
-            useWeatherFileRainSnowIndicators: sc.sizingPeriodWeatherFileDays?.useWeatherFileRainSnowIndicators ?? true,
-        },
-        runPeriod: {
-            name: sc.runPeriod?.name ?? 'Annual_Simulation',
-            beginMonth: sc.runPeriod?.beginMonth ?? 1,
-            beginDayOfMonth: sc.runPeriod?.beginDayOfMonth ?? 1,
-            endMonth: sc.runPeriod?.endMonth ?? 12,
-            endDayOfMonth: sc.runPeriod?.endDayOfMonth ?? 31,
-            dayOfWeekForStart: sc.runPeriod?.dayOfWeekForStart ?? 'UseWeatherFile',
-            useWeatherFileHolidays: sc.runPeriod?.useWeatherFileHolidays ?? false,
-            useWeatherFileDaylightSaving: sc.runPeriod?.useWeatherFileDaylightSaving ?? false,
-            applyWeekendHolidayRule: sc.runPeriod?.applyWeekendHolidayRule ?? true,
-            useWeatherFileRain: sc.runPeriod?.useWeatherFileRain ?? true,
-            useWeatherFileSnow: sc.runPeriod?.useWeatherFileSnow ?? true,
-            numTimesRunperiodToBeRepeated: sc.runPeriod?.numTimesRunperiodToBeRepeated ?? 1,
-        },
-        daylightSavingTime: {
-            startDate: sc.daylightSavingTime?.startDate ?? '4/1',
-            endDate: sc.daylightSavingTime?.endDate ?? '9/30',
-        },
-    };
-
-    return { meta, ep, sc: withDefaults };
-}
-
-function saveSimulationControlConfig(meta, ep, sc) {
-    const next = {
-        ...ep,
-        simulationControl: sc,
-    };
-    if (typeof project.updateMetadata === 'function') {
-        project.updateMetadata({
-            ...meta,
-            energyPlusConfig: next,
-        });
-    } else {
-        project.metadata = {
-            ...(project.metadata || meta),
-            energyPlusConfig: next,
-        };
-    }
-}
-
-function createSimulationControlManagerPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'panel-energyplus-sim-control';
-    panel.className = 'floating-window ui-panel resizable-panel';
-
-    const { sc } = getSimulationControlConfig();
-
-    panel.innerHTML = `
-        <div class="window-header">
-            <span>EnergyPlus Simulation Control</span>
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
-            </div>
-        </div>
-        <div class="window-content space-y-3 text-xs">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure global EnergyPlus simulation settings used when generating the IDF.
-                Location is taken from the EPW file and is not configured here.
-            </p>
-
-            <!-- Building -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">Building</div>
-                <div class="grid grid-cols-4 gap-1">
-                    <div>
-                        <label class="label !text-xs">Name</label>
-                        <input class="w-full text-xs" data-field="b-name" value="${sc.building.name}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">North Axis [deg]</label>
-                        <input type="number" step="0.1" class="w-full text-xs" data-field="b-north" value="${sc.building.northAxis}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Terrain</label>
-                        <select class="w-full text-xs" data-field="b-terrain">
-                            ${['Ocean', 'Country', 'Suburbs', 'City'].map(t => `
-                                <option value="${t}" ${t === sc.building.terrain ? 'selected' : ''}>${t}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Solar Dist.</label>
-                        <select class="w-full text-xs" data-field="b-solar">
-                            ${[
-            'MinimalShadowing',
-            'FullExterior',
-            'FullInteriorAndExterior',
-            'FullInteriorAndExteriorWithReflections'
-        ].map(v => `
-                                <option value="${v}" ${v === sc.building.solarDistribution ? 'selected' : ''}>${v}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div class="grid grid-cols-4 gap-1 mt-1">
-                    <div>
-                        <label class="label !text-xs">Loads Tol.</label>
-                        <input type="number" step="0.001" class="w-full text-xs" data-field="b-loadsTol" value="${sc.building.loadsTolerance}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Temp Tol. [°C]</label>
-                        <input type="number" step="0.01" class="w-full text-xs" data-field="b-tempTol" value="${sc.building.tempTolerance}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Max Warmup Days</label>
-                        <input type="number" class="w-full text-xs" data-field="b-maxWarmup" value="${sc.building.maxWarmupDays}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Min Warmup Days</label>
-                        <input type="number" class="w-full text-xs" data-field="b-minWarmup" value="${sc.building.minWarmupDays}">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Timestep & SimulationControl -->
-            <div class="grid grid-cols-2 gap-2">
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Timestep</div>
-                    <label class="label !text-xs">Timesteps per Hour</label>
-                    <input type="number" min="1" max="60" class="w-full text-xs" data-field="ts-perhour" value="${sc.timestep.timestepsPerHour}">
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Simulation Control</div>
-                    <div class="grid grid-cols-2 gap-1">
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sc-doZone" ${sc.simulationControlFlags.doZoneSizing ? 'checked' : ''}>
-                            <span>Do Zone Sizing</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sc-doSystem" ${sc.simulationControlFlags.doSystemSizing ? 'checked' : ''}>
-                            <span>Do System Sizing</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sc-doPlant" ${sc.simulationControlFlags.doPlantSizing ? 'checked' : ''}>
-                            <span>Do Plant Sizing</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sc-runSizing" ${sc.simulationControlFlags.runSizingPeriods ? 'checked' : ''}>
-                            <span>Run Sizing Periods</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sc-runWeather" ${sc.simulationControlFlags.runWeatherRunPeriods ? 'checked' : ''}>
-                            <span>Run Weather Periods</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- GlobalGeometryRules & ShadowCalculation -->
-            <div class="grid grid-cols-2 gap-2">
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Global Geometry Rules</div>
-                    <div>
-                        <label class="label !text-xs">Starting Vertex Position</label>
-                        <select class="w-full text-xs" data-field="ggr-start">
-                            ${['UpperLeftCorner', 'UpperRightCorner', 'LowerLeftCorner', 'LowerRightCorner'].map(v => `
-                                <option value="${v}" ${v === sc.globalGeometryRules.startingVertexPosition ? 'selected' : ''}>${v}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Vertex Entry Direction</label>
-                        <select class="w-full text-xs" data-field="ggr-dir">
-                            ${['Counterclockwise', 'Clockwise'].map(v => `
-                                <option value="${v}" ${v === sc.globalGeometryRules.vertexEntryDirection ? 'selected' : ''}>${v}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Coordinate System</label>
-                        <select class="w-full text-xs" data-field="ggr-coord">
-                            ${['World', 'Local', 'Relative'].map(v => `
-                                <option value="${v}" ${v === sc.globalGeometryRules.coordinateSystem ? 'selected' : ''}>${v}</option>
-                            `).join('')}
-                        </select>
-                    </div>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Shadow Calculation</div>
-                    <div class="grid grid-cols-2 gap-1">
-                        <div>
-                            <label class="label !text-xs">Calc Frequency</label>
-                            <input type="number" class="w-full text-xs" data-field="shad-freq" value="${sc.shadowCalculation.calculationFrequency}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Max Figures</label>
-                            <input type="number" class="w-full text-xs" data-field="shad-maxfig" value="${sc.shadowCalculation.maxFigures}">
-                        </div>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Algorithm</label>
-                        <input class="w-full text-xs" data-field="shad-alg" value="${sc.shadowCalculation.algorithm}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Sky Diffuse Model</label>
-                        <input class="w-full text-xs" data-field="shad-sky" value="${sc.shadowCalculation.skyDiffuseModel}">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Surface Convection & Heat Balance -->
-            <div class="grid grid-cols-2 gap-2">
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Surface Convection</div>
-                    <div>
-                        <label class="label !text-xs">Inside Algorithm</label>
-                        <input class="w-full text-xs" data-field="conv-in" value="${sc.surfaceConvection.insideAlgorithm}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Outside Algorithm</label>
-                        <input class="w-full text-xs" data-field="conv-out" value="${sc.surfaceConvection.outsideAlgorithm}">
-                    </div>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">Heat Balance Algorithm</div>
-                    <div>
-                        <label class="label !text-xs">Algorithm</label>
-                        <input class="w-full text-xs" data-field="hb-alg" value="${sc.heatBalanceAlgorithm.algorithm}">
-                    </div>
-                    <div class="grid grid-cols-3 gap-1 mt-1">
-                        <div>
-                            <label class="label !text-xs">Surf T max [°C]</label>
-                            <input type="number" class="w-full text-xs" data-field="hb-tmax" value="${sc.heatBalanceAlgorithm.surfaceTempUpperLimit}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">hConv min</label>
-                            <input type="number" step="0.01" class="w-full text-xs" data-field="hb-hmin" value="${sc.heatBalanceAlgorithm.hConvMin}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">hConv max</label>
-                            <input type="number" class="w-full text-xs" data-field="hb-hmax" value="${sc.heatBalanceAlgorithm.hConvMax}">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sizing Period -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">SizingPeriod:WeatherFileDays</div>
-                <div class="grid grid-cols-6 gap-1">
-                    <div>
-                        <label class="label !text-xs">Name</label>
-                        <input class="w-full text-xs" data-field="sp-name" value="${sc.sizingPeriodWeatherFileDays.name}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Begin M</label>
-                        <input type="number" min="1" max="12" class="w-full text-xs" data-field="sp-bm" value="${sc.sizingPeriodWeatherFileDays.beginMonth}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Begin D</label>
-                        <input type="number" min="1" max="31" class="w-full text-xs" data-field="sp-bd" value="${sc.sizingPeriodWeatherFileDays.beginDayOfMonth}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">End M</label>
-                        <input type="number" min="1" max="12" class="w-full text-xs" data-field="sp-em" value="${sc.sizingPeriodWeatherFileDays.endMonth}">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">End D</label>
-                        <input type="number" min="1" max="31" class="w-full text-xs" data-field="sp-ed" value="${sc.sizingPeriodWeatherFileDays.endDayOfMonth}">
-                    </div>
-                    <div class="flex flex-col justify-end gap-0.5">
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sp-dst" ${sc.sizingPeriodWeatherFileDays.useWeatherFileDaylightSaving ? 'checked' : ''}>
-                            <span class="whitespace-nowrap">Use WF DST</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="sp-rain" ${sc.sizingPeriodWeatherFileDays.useWeatherFileRainSnowIndicators ? 'checked' : ''}>
-                            <span class="whitespace-nowrap">Use WF Rain/Snow</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RunPeriod & DST -->
-            <div class="grid grid-cols-2 gap-2">
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">RunPeriod</div>
-                    <div class="grid grid-cols-4 gap-1">
-                        <div class="col-span-2">
-                            <label class="label !text-xs">Name</label>
-                            <input class="w-full text-xs" data-field="rp-name" value="${sc.runPeriod.name}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Begin M</label>
-                            <input type="number" min="1" max="12" class="w-full text-xs" data-field="rp-bm" value="${sc.runPeriod.beginMonth}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Begin D</label>
-                            <input type="number" min="1" max="31" class="w-full text-xs" data-field="rp-bd" value="${sc.runPeriod.beginDayOfMonth}">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-4 gap-1 mt-1">
-                        <div>
-                            <label class="label !text-xs">End M</label>
-                            <input type="number" min="1" max="12" class="w-full text-xs" data-field="rp-em" value="${sc.runPeriod.endMonth}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">End D</label>
-                            <input type="number" min="1" max="31" class="w-full text-xs" data-field="rp-ed" value="${sc.runPeriod.endDayOfMonth}">
-                        </div>
-                        <div class="col-span-2">
-                            <label class="label !text-xs">Day of Week / UseWeatherFile</label>
-                            <input class="w-full text-xs" data-field="rp-dow" value="${sc.runPeriod.dayOfWeekForStart}">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-1 mt-1">
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="rp-holidays" ${sc.runPeriod.useWeatherFileHolidays ? 'checked' : ''}>
-                            <span>Use WF Holidays</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="rp-dst" ${sc.runPeriod.useWeatherFileDaylightSaving ? 'checked' : ''}>
-                            <span>Use WF DST</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="rp-weekend" ${sc.runPeriod.applyWeekendHolidayRule ? 'checked' : ''}>
-                            <span>Weekend Holiday Rule</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="rp-rain" ${sc.runPeriod.useWeatherFileRain ? 'checked' : ''}>
-                            <span>Use WF Rain</span>
-                        </label>
-                        <label class="inline-flex items-center gap-1 text-xs">
-                            <input type="checkbox" data-field="rp-snow" ${sc.runPeriod.useWeatherFileSnow ? 'checked' : ''}>
-                            <span>Use WF Snow</span>
-                        </label>
-                        <div>
-                            <label class="label !text-xs">Repeat Count</label>
-                            <input type="number" min="1" class="w-full text-xs" data-field="rp-repeat" value="${sc.runPeriod.numTimesRunperiodToBeRepeated}">
-                        </div>
-                    </div>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">RunPeriodControl:DaylightSavingTime</div>
-                    <div class="grid grid-cols-2 gap-1">
-                        <div>
-                            <label class="label !text-xs">Start Date (M/D)</label>
-                            <input class="w-full text-xs" data-field="dst-start" value="${sc.daylightSavingTime.startDate}">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">End Date (M/D)</label>
-                            <input class="w-full text-xs" data-field="dst-end" value="${sc.daylightSavingTime.endDate}">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-end">
-                <button class="btn btn-xxs btn-secondary" data-action="save-sim-control">Save Simulation Control</button>
-            </div>
-        </div>
-    `;
-
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
-    } else {
-        const closeButton = panel.querySelector('.window-icon-close');
-        if (closeButton) {
-            closeButton.onclick = () => panel.classList.add('hidden');
-        }
-    }
-
-    const saveBtn = panel.querySelector('[data-action="save-sim-control"]');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                const { meta, ep } = getSimulationControlConfig();
-                const root = panel;
-
-                const num = (sel) => {
-                    const el = root.querySelector(sel);
-                    if (!el) return undefined;
-                    const v = parseFloat(el.value);
-                    return Number.isFinite(v) ? v : undefined;
-                };
-                const str = (sel) => {
-                    const el = root.querySelector(sel);
-                    if (!el) return '';
-                    return (el.value || '').trim();
-                };
-                const bool = (sel) => {
-                    const el = root.querySelector(sel);
-                    return !!(el && el.checked);
-                };
-
-                const sim = {
-                    building: {
-                        name: str('[data-field="b-name"]') || 'OfficeBuilding',
-                        northAxis: num('[data-field="b-north"]') ?? 0,
-                        terrain: str('[data-field="b-terrain"]') || 'City',
-                        loadsTolerance: num('[data-field="b-loadsTol"]') ?? 0.04,
-                        tempTolerance: num('[data-field="b-tempTol"]') ?? 0.4,
-                        solarDistribution: str('[data-field="b-solar"]') || 'FullInteriorAndExteriorWithReflections',
-                        maxWarmupDays: num('[data-field="b-maxWarmup"]') ?? 25,
-                        minWarmupDays: num('[data-field="b-minWarmup"]') ?? 6,
-                    },
-                    timestep: {
-                        timestepsPerHour: num('[data-field="ts-perhour"]') ?? 4,
-                    },
-                    simulationControlFlags: {
-                        doZoneSizing: bool('[data-field="sc-doZone"]'),
-                        doSystemSizing: bool('[data-field="sc-doSystem"]'),
-                        doPlantSizing: bool('[data-field="sc-doPlant"]'),
-                        runSizingPeriods: bool('[data-field="sc-runSizing"]'),
-                        runWeatherRunPeriods: bool('[data-field="sc-runWeather"]'),
-                    },
-                    globalGeometryRules: {
-                        startingVertexPosition: str('[data-field="ggr-start"]') || 'UpperLeftCorner',
-                        vertexEntryDirection: str('[data-field="ggr-dir"]') || 'Counterclockwise',
-                        coordinateSystem: str('[data-field="ggr-coord"]') || 'Relative',
-                    },
-                    shadowCalculation: {
-                        calculationFrequency: num('[data-field="shad-freq"]') ?? 10,
-                        maxFigures: num('[data-field="shad-maxfig"]') ?? 15000,
-                        algorithm: str('[data-field="shad-alg"]') || 'ConvexWeilerAtherton',
-                        skyDiffuseModel: str('[data-field="shad-sky"]') || 'SimpleSkyDiffuseModeling',
-                    },
-                    surfaceConvection: {
-                        insideAlgorithm: str('[data-field="conv-in"]') || 'TARP',
-                        outsideAlgorithm: str('[data-field="conv-out"]') || 'DOE-2',
-                    },
-                    heatBalanceAlgorithm: {
-                        algorithm: str('[data-field="hb-alg"]') || 'ConductionTransferFunction',
-                        surfaceTempUpperLimit: num('[data-field="hb-tmax"]') ?? 200,
-                        hConvMin: num('[data-field="hb-hmin"]') ?? 0.1,
-                        hConvMax: num('[data-field="hb-hmax"]') ?? 1000,
-                    },
-                    sizingPeriodWeatherFileDays: {
-                        name: str('[data-field="sp-name"]') || 'Sizing',
-                        beginMonth: num('[data-field="sp-bm"]') ?? 1,
-                        beginDayOfMonth: num('[data-field="sp-bd"]') ?? 1,
-                        endMonth: num('[data-field="sp-em"]') ?? 12,
-                        endDayOfMonth: num('[data-field="sp-ed"]') ?? 31,
-                        useWeatherFileDaylightSaving: bool('[data-field="sp-dst"]'),
-                        useWeatherFileRainSnowIndicators: bool('[data-field="sp-rain"]'),
-                    },
-                    runPeriod: {
-                        name: str('[data-field="rp-name"]') || 'Annual_Simulation',
-                        beginMonth: num('[data-field="rp-bm"]') ?? 1,
-                        beginDayOfMonth: num('[data-field="rp-bd"]') ?? 1,
-                        endMonth: num('[data-field="rp-em"]') ?? 12,
-                        endDayOfMonth: num('[data-field="rp-ed"]') ?? 31,
-                        dayOfWeekForStart: str('[data-field="rp-dow"]') || 'UseWeatherFile',
-                        useWeatherFileHolidays: bool('[data-field="rp-holidays"]'),
-                        useWeatherFileDaylightSaving: bool('[data-field="rp-dst"]'),
-                        applyWeekendHolidayRule: bool('[data-field="rp-weekend"]'),
-                        useWeatherFileRain: bool('[data-field="rp-rain"]'),
-                        useWeatherFileSnow: bool('[data-field="rp-snow"]'),
-                        numTimesRunperiodToBeRepeated: num('[data-field="rp-repeat"]') ?? 1,
-                    },
-                    daylightSavingTime: {
-                        startDate: str('[data-field="dst-start"]') || '4/1',
-                        endDate: str('[data-field="dst-end"]') || '9/30',
-                    },
-                };
-
-                saveSimulationControlConfig(meta, ep, sim);
-                alert('EnergyPlus Simulation Control configuration saved.');
-            } catch (err) {
-                console.error('SimulationControlManager: save failed', err);
-                alert('Failed to save Simulation Control configuration. Check console for details.');
-            }
-        });
-    }
-
-    return panel;
-}
 
 function getNewZIndex() {
     const allWindows = document.querySelectorAll('.floating-window');
@@ -8899,4 +7999,16 @@ function getNewZIndex() {
     return maxZ + 1;
 }
 
-export { initializeEnergyPlusSidebar };
+export {
+    initializeEnergyPlusSidebar,
+    openMaterialsManagerPanel,
+    openConstructionsManagerPanel,
+    openSchedulesManagerPanel,
+    openZoneLoadsManagerPanel,
+    openIdealLoadsManagerPanel,
+    openDaylightingManagerPanel,
+    openOutputsManagerPanel,
+    openHvacSizingManagerPanel,
+    openOutdoorAirManagerPanel,
+    openShadingManagerPanel
+};

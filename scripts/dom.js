@@ -15,8 +15,9 @@ export function setupDOM() {
         'welcome-screen', 'glow-canvas', 'start-with-shoebox', 'start-with-import', 'welcome-effect-switcher', 'cycle-effect-btn',
 
         // Main Panels & Toggles
-        'panel-energyplus', 'panel-simulation-modules', 'globals-toggle', 'globals-controls', 'panel-analysis-modules', 'toggle-modules-btn', 'toggle-analysis-btn',
-        'save-project-button', 'load-project-button', 'run-simulation-button', 'custom-alert',
+        'panel-checklist', 'panel-run', 'panel-eplus-config', 'panel-simulation-modules', 'globals-toggle', 'globals-controls', 'panel-analysis-modules', 'toggle-modules-btn', 'toggle-analysis-btn',
+        'toggle-panel-checklist-btn', 'toggle-panel-run-btn', 'toggle-panel-eplus-config-btn',
+        'toggle-panel-sensor-btn', 'toggle-panel-viewpoint-btn', 'toggle-panel-scene-btn',
         'custom-alert-title', 'custom-alert-message', 'custom-alert-close',
 
         // Toolbars
@@ -35,8 +36,18 @@ export function setupDOM() {
         'obj-scale-uniform', 'obj-scale-uniform-val',
 
         // Project Panel
-        'project-name', 'project-desc', 'building-type',
-        'upload-epw-btn', 'epw-file-name', 'epw-upload-modal', 'epw-modal-close', 'modal-file-drop-area', 'epw-file-input',
+        'sc-b-name', 'sc-b-north', 'sc-b-north-val', 'sc-b-terrain', 'sc-b-solar',
+        'sc-conv-in', 'sc-conv-out',
+        'sc-doZone', 'sc-doSystem', 'sc-doPlant', 'sc-runSizing', 'sc-runWeather',
+        'sc-doHVACSizing', 'sc-hvac-passes', 'sc-hvac-passes-val', 'hvac-sizing-passes-container',
+        'sc-timestep',
+        'sc-shadow-method', 'sc-shadow-freq-method', 'sc-shadow-freq', 'shadow-calc-freq-container', 'sc-sky-diffuse',
+        'sc-sizing-name', 'sc-sizing-begin-month', 'sc-sizing-begin-day', 'sc-sizing-end-month', 'sc-sizing-end-day',
+        'sc-sizing-start-day', 'sc-sizing-use-dst', 'sc-sizing-use-rain-snow',
+        'save-sim-control-btn', 'save-weather-location-btn',
+        'upload-epw-btn', 'epw-file-name', 'epw-upload-modal', 'epw-modal-close', 'modal-file-drop-area', 'epw-file-input', 'epw-path', 'clear-epw-btn',
+        'loc-from-epw', 'loc-custom', 'custom-location-fields',
+        'cl-name', 'cl-lat', 'cl-lon', 'cl-tz', 'cl-elev',
         'latitude', 'longitude', 'map', 'location-inputs-container', 'radiance-path',
 
         // Dimensions Panel
@@ -157,12 +168,9 @@ export function setupDOM() {
         'ai-custom-model-input', 'openrouter-info-box', 'chat-resize-handle',
         'ai-chat-input-container', 'ai-info-btn', 'helios-capabilities-modal',
         'helios-capabilities-close-btn', 'helios-panel-content', 'ai-chat-tabs',
-        'helios-optimization-tab-btn', 'helios-optimization-content',
         'helios-ep-optimization-tab-btn', 'helios-ep-optimization-content', 'template-ep-optimization-panel',
-        'opt-target-wall', 'opt-shading-type', 'opt-params-container', 'opt-simulation-recipe',
-        'opt-goal-metric', 'opt-constraint', 'opt-population-size', 'opt-generations',
-        'opt-quality', 'start-optimization-btn', 'resume-optimization-btn',
-        'cancel-optimization-btn', 'optimization-log',
+        'ep-opt-info-btn', 'ep-start-optimization-btn', 'ep-resume-optimization-btn',
+        'ep-quick-optimize-btn', 'ep-cancel-optimization-btn', 'ep-optimization-log',
         'ai-chat-tab-1', 'ai-assistant-panel', 'ai-inspector-results', 'ai-critique-results',
         'run-inspector-btn', 'run-critique-btn',
 

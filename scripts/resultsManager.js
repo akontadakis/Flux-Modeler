@@ -20,7 +20,7 @@ export const palettes = {
 class ResultsManager {
     constructor() {
         this.differenceData = { data: null, stats: null };
-        this.hdrResult = null; // Stays global for now
+
 
         // Annual / spectral datasets for A and B views
         this.datasets = {
@@ -29,9 +29,7 @@ class ResultsManager {
                 data: [],
                 annualData: [],
                 annualDirectData: [],
-                glareResult: null,
-                annualGlareResults: {},
-                spectralResults: {},
+
                 circadianMetrics: null,
                 lightingEnergyMetrics: null,
                 lightingMetrics: null,
@@ -42,9 +40,7 @@ class ResultsManager {
                 data: [],
                 annualData: [],
                 annualDirectData: [],
-                glareResult: null,
-                annualGlareResults: {},
-                spectralResults: {},
+
                 circadianMetrics: null,
                 lightingEnergyMetrics: null,
                 lightingMetrics: null,
@@ -602,7 +598,7 @@ class ResultsManager {
         if (hourlyData.temp.length !== 8760) {
             console.warn(`EPW file parsing resulted in ${hourlyData.temp.length} data points instead of 8760.`);
         }
-        
+
         return hourlyData;
     }
 
@@ -616,7 +612,7 @@ class ResultsManager {
         const directions = 16;
         const speedBins = [1, 3, 6, 9, 12]; // Wind speed categories in m/s
         const labels = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-        
+
         // Initialize a 2D array for bins [direction][speed]
         const bins = Array(directions).fill(0).map(() => Array(speedBins.length + 1).fill(0));
 
@@ -627,7 +623,7 @@ class ResultsManager {
             if (spd <= 0.5) continue; // Ignore calm winds
 
             const dirIndex = Math.floor(((dir + 11.25) % 360) / 22.5);
-            
+
             let spdIndex = speedBins.findIndex(s => spd < s);
             if (spdIndex === -1) spdIndex = speedBins.length; // Faster than the fastest bin
 
@@ -689,7 +685,7 @@ class ResultsManager {
                 hourIndex++;
             }
         }
-        
+
         return {
             labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
             min: monthly.map(m => m.min),
@@ -739,11 +735,11 @@ class ResultsManager {
             for (let hour = 0; hour < 24; hour += 0.5) {
                 const { altitude, azimuth } = this._calculateSunPosition(dayOfYear, hour);
                 const altDegrees = altitude * (180 / Math.PI);
-                
+
                 if (altDegrees > 0) {
                     let azimuthDeg = azimuth * (180 / Math.PI);
                     // Convert math azimuth (0=E) to compass azimuth (0=N)
-                    azimuthDeg = (450 - azimuthDeg) % 360; 
+                    azimuthDeg = (450 - azimuthDeg) % 360;
 
                     datasets[name].push({
                         r: 90 - altDegrees, // Radial axis is zenith angle (90 - altitude)
@@ -857,31 +853,31 @@ class ResultsManager {
             this._buildOccupiedMask(occupiedHours);
 
         for (let p = 0; p < numPoints; p++) {
-          let hoursMeetingSda = 0;
-          let hoursMeetingAse = 0;
-          let udiAutonomousHours = 0;
-          let udiExceededHours = 0;
-          let udiInsufficientHours = 0;
-          const hasDirectData = dataset.annualDirectData && dataset.annualDirectData.length > 0;
+            let hoursMeetingSda = 0;
+            let hoursMeetingAse = 0;
+            let udiAutonomousHours = 0;
+            let udiExceededHours = 0;
+            let udiInsufficientHours = 0;
+            const hasDirectData = dataset.annualDirectData && dataset.annualDirectData.length > 0;
 
-          for (let h = 0; h < 8760; h++) {
-              if (occupiedMask[h]) {
-              const totalIlluminance = annualData[p][h];
+            for (let h = 0; h < 8760; h++) {
+                if (occupiedMask[h]) {
+                    const totalIlluminance = annualData[p][h];
 
-              if (totalIlluminance >= sDA_illuminance) hoursMeetingSda++;
+                    if (totalIlluminance >= sDA_illuminance) hoursMeetingSda++;
 
-              // ASE requires direct-only illuminance. Do not fall back to total illuminance.
-              if (hasDirectData) {
-                  const directIlluminance = dataset.annualDirectData[p][h];
-                  if (directIlluminance >= ASE_illuminance) hoursMeetingAse++;
-              }
+                    // ASE requires direct-only illuminance. Do not fall back to total illuminance.
+                    if (hasDirectData) {
+                        const directIlluminance = dataset.annualDirectData[p][h];
+                        if (directIlluminance >= ASE_illuminance) hoursMeetingAse++;
+                    }
 
-                if (totalIlluminance < UDI_min) {
-                    udiInsufficientHours++;
-                } else if (totalIlluminance <= UDI_max) {
-                    udiAutonomousHours++;
-                } else {
-                    udiExceededHours++;
+                    if (totalIlluminance < UDI_min) {
+                        udiInsufficientHours++;
+                    } else if (totalIlluminance <= UDI_max) {
+                        udiAutonomousHours++;
+                    } else {
+                        udiExceededHours++;
                     }
                 }
             }
@@ -1069,7 +1065,7 @@ class ResultsManager {
         const declination = 23.45 * Math.sin(B) * (Math.PI / 180);
 
         const altitude = Math.asin(Math.sin(declination) * Math.sin(latitudeRad) + Math.cos(declination) * Math.cos(latitudeRad) * Math.cos(hourAngle));
-        
+
         let azimuth = Math.acos((Math.sin(declination) * Math.cos(latitudeRad) - Math.cos(declination) * Math.sin(latitudeRad) * Math.cos(hourAngle)) / Math.cos(altitude));
         if (hourAngle > 0) {
             azimuth = 2 * Math.PI - azimuth;
@@ -1231,7 +1227,7 @@ class ResultsManager {
         const dgpPointData = agr[glareKey]; // [point][hour]
         const numPoints = dgpPointData.length;
         if (numPoints === 0) return null;
-        
+
         const bins = new Array(16).fill(0);
         const labels = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
@@ -1244,7 +1240,7 @@ class ResultsManager {
                     break;
                 }
             }
-            
+
             if (hasGlareThisHour) {
                 const dayOfYear = Math.floor(h / 24) + 1;
                 const solarTime = h % 24 + 0.5; // Use mid-hour for better accuracy
@@ -1253,7 +1249,7 @@ class ResultsManager {
                 if (altitude > 0) {
                     // Radiance azimuth is 0=North, 90=East, so we adjust from math azimuth (0=East)
                     let azimuthDeg = azimuth * (180 / Math.PI);
-                    azimuthDeg = (450 - azimuthDeg) % 360; 
+                    azimuthDeg = (450 - azimuthDeg) % 360;
 
                     const sectorIndex = Math.floor((azimuthDeg + 11.25) / 22.5) % 16;
                     bins[sectorIndex]++;
@@ -1342,7 +1338,7 @@ class ResultsManager {
                 pointId: p
             });
         }
-            return combinedData;
+        return combinedData;
     }
 
     /**
@@ -1403,7 +1399,7 @@ class ResultsManager {
         this.calculateDifference();
 
         const activeStats = this.getActiveStats();
-        if(activeStats) {
+        if (activeStats) {
             this.updateColorScale(activeStats.min, activeStats.max, this.colorScale.palette);
         }
     }
@@ -1447,7 +1443,7 @@ class ResultsManager {
             const g = Math.round(c1[1] + (c2[1] - c1[1]) * fraction);
             const b = Math.round(c1[2] + (c2[2] - c1[2]) * fraction);
             const toHex = (c) => ('0' + c.toString(16)).slice(-2);
-           return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 
         } else {
             const min = minOverride ?? this.colorScale.min;
@@ -1635,8 +1631,8 @@ class ResultsManager {
             const pointValue = data[i];
             let conditionMet = false;
             switch (condition) {
-                case '<':  conditionMet = pointValue < value; break;
-                case '>':  conditionMet = pointValue > value; break;
+                case '<': conditionMet = pointValue < value; break;
+                case '>': conditionMet = pointValue > value; break;
                 case '<=': conditionMet = pointValue <= value; break;
                 case '>=': conditionMet = pointValue >= value; break;
             }

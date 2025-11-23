@@ -3,7 +3,7 @@
 import { getDom, setupDOM } from './dom.js'; // <--- Added setupDOM here
 import { initSidebar } from './sidebar.js';
 import { AperturePanelUI } from './AperturePanelUI.js'; // <--- Added Class Import
-import { updateScene, axesObject, updateSensorGridColors, roomObject, shadingObject, sensorMeshes, wallSelectionGroup, highlightWall, clearWallHighlights, updateHighlightColor, furnitureObject, addFurniture, updateFurnitureColor, resizeHandlesObject, contextObject, vegetationObject, addImportedAsset, getWallGroupById } from './geometry.js';
+import { updateScene, axesObject, roomObject, shadingObject, wallSelectionGroup, highlightWall, clearWallHighlights, updateHighlightColor, furnitureObject, addFurniture, updateFurnitureColor, resizeHandlesObject, contextObject, vegetationObject, addImportedAsset, getWallGroupById } from './geometry.js';
 
 import { activeCamera, perspectiveCamera, orthoCamera, setActiveCamera, onWindowResize, controls, transformControls, sensorTransformControls, viewpointCamera, scene, updateLiveViewType, renderer, toggleFirstPersonView as sceneToggleFPV, isFirstPersonView as sceneIsFPV, fpvOrthoCamera, updateViewpointFromUI, setGizmoVisibility, setUpdatingFromSliders, isUpdatingCameraFromSliders, setGizmoMode } from './scene.js';
 import * as THREE from 'three';
@@ -13,8 +13,21 @@ import { project } from './project.js';
 export { generateAndStoreOccupancyCsv, getDom };
 import { resultsManager, palettes } from './resultsManager.js';
 import * as MESH from '../scripts/scene.js';
-import { initHdrViewer, openHdrViewer } from './hdrViewer.js';
+
 import { initializeEnergyPlus } from './energyplus.js';
+import { getConfig, setWeather, setSimulationControl } from './energyplusConfigService.js';
+import {
+    openMaterialsManagerPanel,
+    openConstructionsManagerPanel,
+    openSchedulesManagerPanel,
+    openZoneLoadsManagerPanel,
+    openIdealLoadsManagerPanel,
+    openDaylightingManagerPanel,
+    openOutputsManagerPanel,
+    openHvacSizingManagerPanel,
+    openOutdoorAirManagerPanel,
+    openShadingManagerPanel
+} from './energyplusSidebar.js';
 
 // --- SHORTCUTS ---
 // Centralized object to define all keyboard shortcut actions
@@ -37,12 +50,14 @@ const shortcutActions = {
     'toggleProjectPanel': () => togglePanelVisibility('panel-project', 'toggle-panel-project-btn'),
     'toggleDimensionsPanel': () => togglePanelVisibility('panel-dimensions', 'toggle-panel-dimensions-btn'),
     'toggleAperturePanel': () => togglePanelVisibility('panel-aperture', 'toggle-panel-aperture-btn'),
-    'toggleLightingPanel': () => togglePanelVisibility('panel-lighting', 'toggle-panel-lighting-btn'),
+
     'toggleMaterialsPanel': () => togglePanelVisibility('panel-materials', 'toggle-panel-materials-btn'),
-    'toggleSensorPanel': () => togglePanelVisibility('panel-sensor', 'toggle-panel-sensor-btn'),
-    'toggleViewpointPanel': () => togglePanelVisibility('panel-viewpoint', 'toggle-panel-viewpoint-btn'),
-    'toggleScenePanel': () => togglePanelVisibility('panel-scene-elements', 'toggle-panel-scene-btn'),
-    'toggleEnergyPlusPanel': () => togglePanelVisibility('panel-energyplus', 'toggle-panel-energyplus-btn'),
+
+
+
+    'toggleChecklistPanel': () => togglePanelVisibility('panel-checklist', 'toggle-panel-checklist-btn'),
+    'toggleRunPanel': () => togglePanelVisibility('panel-run', 'toggle-panel-run-btn'),
+
 
     // Other UI toggles
     'toggleInfoPanel': () => togglePanelVisibility('panel-info', 'info-button'),
@@ -76,11 +91,11 @@ const keyMap = {
     'Digit1': 'toggleProjectPanel',
     'Digit2': 'toggleDimensionsPanel',
     'Digit3': 'toggleAperturePanel',
-    'Digit4': 'toggleLightingPanel',
+
     'Digit5': 'toggleMaterialsPanel',
-    'Digit6': 'toggleSensorPanel',
-    'Digit7': 'toggleViewpointPanel',
-    'Digit8': 'toggleScenePanel',
+
+
+
     'Digit9': 'toggleEnergyPlusPanel',
     'KeyQ': 'toggleQuadView',
     'KeyV': 'toggleFpv',
@@ -863,13 +878,11 @@ function setupTaskAreaVisualizer() {
 function setupHeliosPanel() {
     const dom = getDom();
 
-    const optimizationTab = dom['helios-optimization-tab-btn'];          // Radiance / daylight optimization
     const epOptimizationTab = dom['helios-ep-optimization-tab-btn'];    // EnergyPlus optimization
     const chatTab = dom['ai-chat-tab-1'];
     const chatContent = dom['ai-chat-content-1'];
 
-    // Always make both optimization tabs available; content visibility is managed by ai-assistant.js
-    if (optimizationTab) optimizationTab.classList.remove('hidden');
+    // Always make EP optimization tab available; content visibility is managed by ai-assistant.js
     if (epOptimizationTab) epOptimizationTab.classList.remove('hidden');
 
     // Ensure there is always at least one active tab (chat) if none is set yet
@@ -877,9 +890,6 @@ function setupHeliosPanel() {
         chatTab.classList.add('active');
         chatContent.classList.remove('hidden');
     }
-
-    // NOTE: Former helios-mode-toggle behavior has been removed.
-    // Both optimization tabs are always available; tab click handlers manage active content.
 
     // AI Panel Tab Switching
     // Logic moved entirely to ai-assistant.js to handle dynamic chat tabs and optimization tabs unification.
@@ -923,7 +933,7 @@ export async function setupEventListeners() {
     });
 
     // The import from annualDashboard is updated to include the new functions
-    initHdrViewer(); // Initialize the HDR viewer
+
     observeAndInitDynamicPanels();
 
     // Geometry Mode Switcher
@@ -951,13 +961,9 @@ export async function setupEventListeners() {
     dom['view-type']?.addEventListener('change', (e) => updateFovControlsForViewType(e.target.value));
     dom['save-project-button']?.addEventListener('click', () => project.downloadProjectFile());
     dom['load-project-button']?.addEventListener('click', () => project.loadProject());
-    dom['upload-epw-btn']?.addEventListener('click', () => {
-        dom['epw-upload-modal'].style.zIndex = getNewZIndex();
-        dom['epw-upload-modal'].classList.replace('hidden', 'flex');
-
-    });
-
-    dom['epw-modal-close']?.addEventListener('click', () => dom['epw-upload-modal'].classList.replace('flex', 'hidden'));
+    // Old EPW modal listeners removed in favor of Project Setup Panel integration
+    // dom['upload-epw-btn']?.addEventListener('click', () => { ... });
+    // dom['epw-modal-close']?.addEventListener('click', () => ...);
 
     setupPanelToggleButtons();
     setupHeliosPanel();
@@ -968,6 +974,9 @@ export async function setupEventListeners() {
     dom['view-btn-back']?.addEventListener('click', () => setCameraView('back'));
     dom['view-btn-left']?.addEventListener('click', () => setCameraView('left'));
     dom['view-btn-right']?.addEventListener('click', () => setCameraView('right'));
+
+    initializeProjectSetupPanel();
+    initializeEnergyPlusConfigPanel();
 
     dom['view-btn-quad']?.addEventListener('click', () => {
         const container = dom['render-container'];
@@ -1287,10 +1296,7 @@ export async function setupEventListeners() {
         dom['shortcut-help-modal']?.classList.replace('flex', 'hidden');
     });
 
-    // Listener for the new optimization info modal
-    dom['opt-info-modal-close-btn']?.addEventListener('click', () => {
-        dom['optimization-info-modal']?.classList.replace('flex', 'hidden');
-    });
+
 
     // Listener for the new EP optimization info modal
     dom['ep-opt-info-modal-close-btn']?.addEventListener('click', () => {
@@ -1574,7 +1580,7 @@ export async function setupEventListeners() {
         });
     }
 
-    setupRecipeGuidesPanel();
+
 
     promptForProjectDirectory();
 
@@ -1765,17 +1771,17 @@ const PANEL_BUTTON_MAP = {
     'panel-project': 'toggle-panel-project-btn',
     'panel-dimensions': 'toggle-panel-dimensions-btn',
     'panel-aperture': 'toggle-panel-aperture-btn',
-    'panel-lighting': 'toggle-panel-lighting-btn',
+
     'panel-materials': 'toggle-panel-materials-btn',
-    'panel-sensor': 'toggle-panel-sensor-btn',
-    'panel-viewpoint': 'toggle-panel-viewpoint-btn',
-    'panel-scene-elements': 'toggle-panel-scene-btn',
+
     'panel-info': 'info-button',
     'panel-recipe-guides': 'recipe-guides-btn',
     'panel-ai-assistant': 'ai-assistant-button',
-    'panel-simulation-modules': 'toggle-modules-btn',
+
     'panel-analysis-modules': 'toggle-analysis-btn',
-    'panel-energyplus': 'toggle-panel-energyplus-btn'
+    'panel-checklist': 'toggle-panel-checklist-btn',
+    'panel-run': 'toggle-panel-run-btn',
+
 };
 
 export function getPanelToggleButtonId(panelId) {
@@ -1865,16 +1871,12 @@ function setupPanelToggleButtons() {
         'toggle-panel-project-btn': 'panel-project',
         'toggle-panel-dimensions-btn': 'panel-dimensions',
         'toggle-panel-aperture-btn': 'panel-aperture',
-        'toggle-panel-lighting-btn': 'panel-lighting',
         'toggle-panel-materials-btn': 'panel-materials',
-        'toggle-panel-sensor-btn': 'panel-sensor',
-        'toggle-panel-viewpoint-btn': 'panel-viewpoint',
-        'toggle-panel-scene-btn': 'panel-scene-elements',
-        'toggle-panel-energyplus-btn': 'panel-energyplus',
-        'info-button': 'panel-info',
-        'recipe-guides-btn': 'panel-recipe-guides',
-        'toggle-modules-btn': 'panel-simulation-modules',
-        'toggle-analysis-btn': 'panel-analysis-modules'
+        'toggle-panel-checklist-btn': 'panel-checklist',
+        'toggle-panel-run-btn': 'panel-run',
+        'toggle-panel-eplus-config-btn': 'panel-eplus-config',
+
+        'info-button': 'panel-info'
     };
 
     for (const [btnId, panelId] of Object.entries(panelMap)) {
@@ -1986,7 +1988,9 @@ export function initializePanelControls(win) {
                     'panel-ai-assistant': 'ai-assistant-button',
                     'panel-simulation-modules': 'toggle-modules-btn',
                     'panel-analysis-modules': 'toggle-analysis-btn',
-                    'panel-energyplus': 'toggle-panel-energyplus-btn'
+                    'panel-checklist': 'toggle-panel-checklist-btn',
+                    'panel-run': 'toggle-panel-run-btn',
+
                 };
                 const btnId = panelMap[win.id];
                 if (btnId && dom[btnId]) {
@@ -2432,6 +2436,66 @@ function setupProjectPanel() {
         dom.longitude.addEventListener('change', updateMapFromInputs);
         updateInputsFromMap(marker.getLatLng());
     }
+
+    // Setup info icon popovers with dynamic positioning
+    setupInfoPopovers();
+}
+
+/**
+ * Sets up dynamic positioning for info popovers to prevent clipping
+ */
+function setupInfoPopovers() {
+    const infoIcons = document.querySelectorAll('.info-icon');
+
+    infoIcons.forEach(icon => {
+        const popover = icon.querySelector('.info-popover');
+        if (!popover) return;
+
+        icon.addEventListener('mouseenter', () => {
+            // Temporarily show popover to get accurate dimensions
+            popover.style.visibility = 'hidden';
+            popover.style.display = 'block';
+            popover.style.opacity = '0';
+
+            const iconRect = icon.getBoundingClientRect();
+            const popoverWidth = popover.offsetWidth;
+            const popoverHeight = popover.offsetHeight;
+
+            // Calculate centered position
+            let left = iconRect.left + (iconRect.width / 2) - (popoverWidth / 2);
+
+            // Position above the icon by default
+            let top = iconRect.top - popoverHeight - 10;
+
+            // Adjust if too close to top of viewport - position below instead
+            if (top < 10) {
+                top = iconRect.bottom + 10;
+            }
+
+            // Adjust if too far right
+            if (left + popoverWidth > window.innerWidth - 10) {
+                left = window.innerWidth - popoverWidth - 10;
+            }
+
+            // Adjust if too far left
+            if (left < 10) {
+                left = 10;
+            }
+
+            // Adjust if too far down
+            if (top + popoverHeight > window.innerHeight - 10) {
+                top = window.innerHeight - popoverHeight - 10;
+            }
+
+            popover.style.top = `${top}px`;
+            popover.style.left = `${left}px`;
+
+            // Now make it properly visible - reset to let CSS handle display
+            popover.style.visibility = '';
+            popover.style.display = '';
+            popover.style.opacity = '';
+        });
+    });
 }
 
 function setupEpwUploadModal() {
@@ -3061,73 +3125,7 @@ export function getAllShadingParams() {
     return params;
 }
 
-/**
- * Gathers all sensor grid parameters from the UI into a structured object.
- * @returns {object} An object containing illuminance and view grid parameters.
- */
-export function getSensorGridParams() {
-    const dom = getDom();
 
-    const getFloat = (id, defaultValue = 0) => dom[id] ? parseFloat(dom[id].value) : defaultValue;
-    const getInt = (id, defaultValue = 0) => dom[id] ? parseInt(dom[id].value, 10) : defaultValue;
-    const getChecked = (id, defaultValue = false) => dom[id] ? dom[id].checked : defaultValue;
-
-    const floorParams = {
-        enabled: getChecked('grid-floor-toggle'),
-        spacing: getFloat('floor-grid-spacing', 0.5),
-        offset: getFloat('floor-grid-offset', 0.8),
-        showIn3D: getChecked('show-floor-grid-3d-toggle'),
-        isTaskArea: getChecked('task-area-toggle'),
-        hasSurrounding: getChecked('surrounding-area-toggle'),
-        task: {
-            x: getFloat('task-area-start-x'),
-            z: getFloat('task-area-start-z'),
-            width: getFloat('task-area-width'),
-            depth: getFloat('task-area-depth'),
-        },
-        surroundingWidth: getFloat('surrounding-area-width', 0.5),
-    };
-
-    const illuminanceParams = {
-        enabled: getChecked('illuminance-grid-toggle'),
-        showIn3D: getChecked('show-floor-grid-3d-toggle'),
-        floor: floorParams,
-        ceiling: {
-            enabled: getChecked('grid-ceiling-toggle'),
-            spacing: getFloat('ceiling-grid-spacing', 0.5),
-            offset: getFloat('ceiling-grid-offset', -0.2),
-        },
-        walls: {
-            enabled: ['north', 'south', 'east', 'west'].some(dir => getChecked(`grid-${dir}-toggle`)),
-            spacing: getFloat('wall-grid-spacing', 0.5),
-            offset: getFloat('wall-grid-offset', 0.1),
-            surfaces: {
-                n: getChecked('grid-north-toggle'),
-                s: getChecked('grid-south-toggle'),
-                e: getChecked('grid-east-toggle'),
-                w: getChecked('grid-west-toggle'),
-            }
-        }
-    };
-
-    const viewParams = {
-        enabled: getChecked('view-grid-toggle'),
-        showIn3D: getChecked('show-view-grid-3d-toggle', true), // Default to true if element not found
-        spacing: getFloat('view-grid-spacing', 0.75),
-        offset: getFloat('view-grid-offset', 1.2),
-        numDirs: getInt('view-grid-directions', 6),
-        startVec: [
-            getFloat('view-grid-start-vec-x', 1),
-            getFloat('view-grid-start-vec-y', 0),
-            getFloat('view-grid-start-vec-z', 0)
-        ]
-    };
-
-    return {
-        illuminance: illuminanceParams,
-        view: viewParams
-    };
-}
 
 function setProjectionMode(mode, updateViewButtons = true) {
     const dom = getDom();
@@ -3805,6 +3803,11 @@ export function updateViewpointFromSliders() {
     // If the camera is currently being updated by the gizmo-to-slider sync,
     // don't process this slider input to prevent a feedback loop.
     if (isUpdatingCameraFromSliders) {
+        return;
+    }
+
+    // Guard: If viewpoint panel elements don't exist (removed for EnergyPlus-only mode), skip update
+    if (!dom['view-pos-x'] || !dom['view-pos-y'] || !dom['view-pos-z']) {
         return;
     }
 
@@ -6587,1216 +6590,410 @@ async function _updateSelectedMassingBlock() {
     updateMassingInfo();
 }
 
-/**
- * Sets up event listeners for the massing shape radio buttons.
- */
-function setupMassingShapeListeners() {
-    const shapeRadios = document.querySelectorAll('input[name="massing-shape"]');
-    shapeRadios.forEach(radio => {
-        radio.addEventListener('change', () => {
-            handleMassingShapeChange();
-            if (transformControls.object && transformControls.object.userData.isMassingBlock) {
-                _updateSelectedMassingBlock();
+export function initializeProjectSetupPanel() {
+    const dom = getDom();
+    const { config } = getConfig(project);
+    const sc = config.simulationControl;
+    const weather = config.weather;
+
+    // --- Map Initialization ---
+    let projectMap = null;
+    let projectMarker = null;
+
+    if (dom.map) {
+        // Fix for Leaflet's default icon paths
+        if (typeof L !== 'undefined') {
+            delete L.Icon.Default.prototype._getIconUrl;
+            L.Icon.Default.mergeOptions({
+                iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+            });
+
+            // Initialize map
+            projectMap = L.map(dom.map, { zoomControl: false }).setView([40.7128, -74.0060], 4);
+
+            const lightTiles = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            const darkTiles = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+            // Set initial tiles based on current theme
+            const initialTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const initialTiles = initialTheme === 'dark' ? darkTiles : lightTiles;
+
+            L.tileLayer(initialTiles, {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 20
+            }).addTo(projectMap);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(projectMap);
+
+            // Add marker
+            projectMarker = L.marker(projectMap.getCenter(), { draggable: true }).addTo(projectMap);
+
+            // Update custom location fields when marker is dragged
+            projectMarker.on('dragend', (e) => {
+                const latlng = e.target.getLatLng();
+                if (dom['cl-lat']) dom['cl-lat'].value = latlng.lat.toFixed(4);
+                if (dom['cl-lon']) dom['cl-lon'].value = latlng.lng.toFixed(4);
+            });
+
+            // Update marker when custom location changes
+            const updateMapFromCustomLocation = () => {
+                const lat = parseFloat(dom['cl-lat']?.value || 0);
+                const lon = parseFloat(dom['cl-lon']?.value || 0);
+                if (!isNaN(lat) && !isNaN(lon) && projectMap && projectMarker) {
+                    const newLatLng = L.latLng(lat, lon);
+                    projectMap.setView(newLatLng, 10);
+                    projectMarker.setLatLng(newLatLng);
+                }
+            };
+
+            // Listen to custom location field changes
+            dom['cl-lat']?.addEventListener('change', updateMapFromCustomLocation);
+            dom['cl-lon']?.addEventListener('change', updateMapFromCustomLocation);
+
+            // Set initial marker position if we have weather data
+            if (weather && weather.customLocation) {
+                const lat = weather.customLocation.latitude;
+                const lon = weather.customLocation.longitude;
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    const initialLatLng = L.latLng(lat, lon);
+                    projectMap.setView(initialLatLng, 10);
+                    projectMarker.setLatLng(initialLatLng);
+                }
             }
+
+            // Fix map tile rendering issues by invalidating size after a short delay
+            // This ensures the container has fully rendered before the map calculates its dimensions
+            setTimeout(() => {
+                if (projectMap) {
+                    projectMap.invalidateSize();
+                }
+            }, 100);
+
+            // Also invalidate when the panel becomes visible
+            const projectPanel = document.getElementById('panel-project');
+            if (projectPanel) {
+                // Use MutationObserver to detect when panel becomes visible
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.attributeName === 'class') {
+                            const isVisible = !projectPanel.classList.contains('hidden');
+                            if (isVisible && projectMap) {
+                                setTimeout(() => projectMap.invalidateSize(), 50);
+                            }
+                        }
+                    });
+                });
+                observer.observe(projectPanel, { attributes: true });
+            }
+        }
+    }
+
+    // --- Simulation Control Initialization ---
+    if (sc) {
+        // Building
+        if (dom['sc-b-name']) dom['sc-b-name'].value = sc.building.name;
+        if (dom['sc-b-north']) {
+            dom['sc-b-north'].value = sc.building.northAxis;
+            if (dom['sc-b-north-val']) dom['sc-b-north-val'].textContent = `${sc.building.northAxis}°`;
+        }
+        if (dom['sc-b-terrain']) dom['sc-b-terrain'].value = sc.building.terrain;
+        if (dom['sc-b-solar']) dom['sc-b-solar'].value = sc.building.solarDistribution;
+
+        // Surface Convection
+        if (dom['sc-conv-in']) dom['sc-conv-in'].value = sc.surfaceConvection.insideAlgorithm;
+        if (dom['sc-conv-out']) dom['sc-conv-out'].value = sc.surfaceConvection.outsideAlgorithm;
+
+        // Simulation Flags
+        if (dom['sc-doZone']) dom['sc-doZone'].checked = sc.simulationControlFlags.doZoneSizing;
+        if (dom['sc-doSystem']) dom['sc-doSystem'].checked = sc.simulationControlFlags.doSystemSizing;
+        if (dom['sc-doPlant']) dom['sc-doPlant'].checked = sc.simulationControlFlags.doPlantSizing;
+        if (dom['sc-runSizing']) dom['sc-runSizing'].checked = sc.simulationControlFlags.runSizingPeriods;
+        if (dom['sc-runWeather']) dom['sc-runWeather'].checked = sc.simulationControlFlags.runWeatherRunPeriods;
+
+        // HVAC Sizing (New)
+        if (dom['sc-doHVACSizing']) {
+            // Assuming this might be stored in simulationControlFlags or a new place. 
+            // For now, we'll check if it exists in the config, otherwise default to false.
+            dom['sc-doHVACSizing'].checked = sc.simulationControlFlags.doHVACSizingSimulation || false;
+            toggleHVACPasses(dom['sc-doHVACSizing'].checked);
+        }
+        if (dom['sc-hvac-passes']) {
+            dom['sc-hvac-passes'].value = sc.simulationControlFlags.maxHVACSizingSimulationPasses || 0;
+            if (dom['sc-hvac-passes-val']) dom['sc-hvac-passes-val'].textContent = dom['sc-hvac-passes'].value;
+        }
+
+        // Timestep
+        if (dom['sc-timestep']) {
+            dom['sc-timestep'].value = sc.timestep || 6; // Default to 6 (10-minute timestep)
+        }
+
+        // Shadow Calculation
+        if (sc.shadowCalculation) {
+            if (dom['sc-shadow-method']) dom['sc-shadow-method'].value = sc.shadowCalculation.method || 'PolygonClipping';
+            if (dom['sc-shadow-freq-method']) {
+                dom['sc-shadow-freq-method'].value = sc.shadowCalculation.updateFrequencyMethod || 'Periodic';
+                toggleShadowFreqInput(sc.shadowCalculation.updateFrequencyMethod === 'Periodic');
+            }
+            if (dom['sc-shadow-freq']) dom['sc-shadow-freq'].value = sc.shadowCalculation.updateFrequency || 20;
+            if (dom['sc-sky-diffuse']) dom['sc-sky-diffuse'].value = sc.shadowCalculation.skyDiffuseAlgorithm || 'SimpleSkyDiffuseModeling';
+        }
+
+        // Sizing Period
+        if (sc.sizingPeriod) {
+            if (dom['sc-sizing-name']) dom['sc-sizing-name'].value = sc.sizingPeriod.name || '';
+            if (dom['sc-sizing-begin-month']) dom['sc-sizing-begin-month'].value = sc.sizingPeriod.beginMonth || 7;
+            if (dom['sc-sizing-begin-day']) dom['sc-sizing-begin-day'].value = sc.sizingPeriod.beginDay || 1;
+            if (dom['sc-sizing-end-month']) dom['sc-sizing-end-month'].value = sc.sizingPeriod.endMonth || 7;
+            if (dom['sc-sizing-end-day']) dom['sc-sizing-end-day'].value = sc.sizingPeriod.endDay || 7;
+            if (dom['sc-sizing-start-day']) dom['sc-sizing-start-day'].value = sc.sizingPeriod.startDayOfWeek || 'Monday';
+            if (dom['sc-sizing-use-dst']) dom['sc-sizing-use-dst'].checked = sc.sizingPeriod.useDaylightSaving !== false;
+            if (dom['sc-sizing-use-rain-snow']) dom['sc-sizing-use-rain-snow'].checked = sc.sizingPeriod.useRainSnow !== false;
+        }
+    }
+
+    // --- Weather Initialization ---
+    if (weather) {
+        if (dom['epw-path']) dom['epw-path'].value = weather.epwPath || '';
+
+        const isCustom = weather.locationSource === 'Custom';
+        if (dom['loc-custom']) dom['loc-custom'].checked = isCustom;
+        if (dom['loc-from-epw']) dom['loc-from-epw'].checked = !isCustom;
+        toggleCustomLocationFields(isCustom);
+
+        if (weather.customLocation) {
+            if (dom['cl-name']) dom['cl-name'].value = weather.customLocation.name || '';
+            if (dom['cl-lat']) dom['cl-lat'].value = weather.customLocation.latitude || 0;
+            if (dom['cl-lon']) dom['cl-lon'].value = weather.customLocation.longitude || 0;
+            if (dom['cl-tz']) dom['cl-tz'].value = weather.customLocation.timeZone || 0;
+            if (dom['cl-elev']) dom['cl-elev'].value = weather.customLocation.elevation || 0;
+        }
+    }
+
+    // --- Event Listeners ---
+
+    // Sliders
+    dom['sc-b-north']?.addEventListener('input', (e) => {
+        if (dom['sc-b-north-val']) dom['sc-b-north-val'].textContent = `${e.target.value}°`;
+    });
+
+    dom['sc-hvac-passes']?.addEventListener('input', (e) => {
+        if (dom['sc-hvac-passes-val']) dom['sc-hvac-passes-val'].textContent = e.target.value;
+    });
+
+    // Toggles
+    dom['sc-doHVACSizing']?.addEventListener('change', (e) => {
+        toggleHVACPasses(e.target.checked);
+    });
+
+    const locRadios = document.querySelectorAll('input[name="loc-source"]');
+    locRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            toggleCustomLocationFields(e.target.value === 'Custom');
         });
     });
+
+    // Shadow Frequency Method toggle
+    dom['sc-shadow-freq-method']?.addEventListener('change', (e) => {
+        toggleShadowFreqInput(e.target.value === 'Periodic');
+    });
+
+    // Save All Settings
+    dom['save-sim-control-btn']?.addEventListener('click', () => {
+        const newSc = {
+            building: {
+                name: dom['sc-b-name']?.value || 'OfficeBuilding',
+                northAxis: parseFloat(dom['sc-b-north']?.value || 0),
+                terrain: dom['sc-b-terrain']?.value || 'City',
+                solarDistribution: dom['sc-b-solar']?.value || 'FullInteriorAndExteriorWithReflections',
+            },
+            surfaceConvection: {
+                insideAlgorithm: dom['sc-conv-in']?.value || 'TARP',
+                outsideAlgorithm: dom['sc-conv-out']?.value || 'DOE-2',
+            },
+            simulationControlFlags: {
+                doZoneSizing: dom['sc-doZone']?.checked || false,
+                doSystemSizing: dom['sc-doSystem']?.checked || false,
+                doPlantSizing: dom['sc-doPlant']?.checked || false,
+                runSizingPeriods: dom['sc-runSizing']?.checked || false,
+                runWeatherRunPeriods: dom['sc-runWeather']?.checked || false,
+                doHVACSizingSimulation: dom['sc-doHVACSizing']?.checked || false,
+                maxHVACSizingSimulationPasses: parseInt(dom['sc-hvac-passes']?.value || 0),
+            },
+            timestep: parseInt(dom['sc-timestep']?.value || 6),
+            shadowCalculation: {
+                method: dom['sc-shadow-method']?.value || 'PolygonClipping',
+                updateFrequencyMethod: dom['sc-shadow-freq-method']?.value || 'Periodic',
+                updateFrequency: parseInt(dom['sc-shadow-freq']?.value || 20),
+                skyDiffuseAlgorithm: dom['sc-sky-diffuse']?.value || 'SimpleSkyDiffuseModeling',
+            },
+            sizingPeriod: {
+                name: dom['sc-sizing-name']?.value || '',
+                beginMonth: parseInt(dom['sc-sizing-begin-month']?.value || 7),
+                beginDay: parseInt(dom['sc-sizing-begin-day']?.value || 1),
+                endMonth: parseInt(dom['sc-sizing-end-month']?.value || 7),
+                endDay: parseInt(dom['sc-sizing-end-day']?.value || 7),
+                startDayOfWeek: dom['sc-sizing-start-day']?.value || 'Monday',
+                useDaylightSaving: dom['sc-sizing-use-dst']?.checked ?? true,
+                useRainSnow: dom['sc-sizing-use-rain-snow']?.checked ?? true,
+            },
+        };
+
+        setSimulationControl(project, newSc);
+
+        // Save Weather
+        const locSource = document.querySelector('input[name="loc-source"]:checked')?.value || 'FromEPW';
+        const newWeather = {
+            epwPath: dom['epw-path']?.value || '',
+            locationSource: locSource,
+            customLocation: locSource === 'Custom' ? {
+                name: dom['cl-name']?.value,
+                latitude: parseFloat(dom['cl-lat']?.value || 0),
+                longitude: parseFloat(dom['cl-lon']?.value || 0),
+                timeZone: parseFloat(dom['cl-tz']?.value || 0),
+                elevation: parseFloat(dom['cl-elev']?.value || 0),
+            } : undefined
+        };
+
+        setWeather(project, newWeather);
+
+        alert('Project Settings Saved.');
+    });
+
+    // Save Weather Button (kept for compatibility if needed, but functionality merged into Save All)
+    dom['save-weather-location-btn']?.addEventListener('click', () => {
+        dom['save-sim-control-btn']?.click();
+    });
+
+
+    // EPW Upload
+    dom['upload-epw-btn']?.addEventListener('click', async () => {
+        if (window.electronAPI) {
+            const filePath = await window.electronAPI.openFileDialog(['epw']);
+            if (filePath) {
+                if (dom['epw-path']) dom['epw-path'].value = filePath;
+                // Read and parse EPW file
+                try {
+                    const epwContent = await window.electronAPI.readFile(filePath);
+                    parseEpwAndUpdateMap(epwContent, projectMap, projectMarker);
+                } catch (error) {
+                    console.error('Failed to read EPW file:', error);
+                }
+            }
+        } else {
+            // Web fallback
+            dom['epw-file-input']?.click();
+        }
+    });
+
+    dom['epw-file-input']?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (dom['epw-path']) dom['epw-path'].value = file.name;
+
+            // Read and parse the EPW file
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const epwContent = event.target.result;
+                parseEpwAndUpdateMap(epwContent, projectMap, projectMarker);
+            };
+            reader.readAsText(file);
+        }
+    });
+
+    dom['clear-epw-btn']?.addEventListener('click', () => {
+        if (dom['epw-path']) dom['epw-path'].value = '';
+    });
+
+    // Helper function to parse EPW and update map
+    function parseEpwAndUpdateMap(epwContent, map, marker) {
+        try {
+            const lines = epwContent.split('\n');
+            const locationLine = lines.find(line => line.startsWith('LOCATION'));
+
+            if (locationLine) {
+                const parts = locationLine.split(',');
+                if (parts.length >= 8) {
+                    const locationName = parts[1]?.trim() || '';
+                    const lat = parseFloat(parts[6]);
+                    const lon = parseFloat(parts[7]);
+                    const tz = parseFloat(parts[8]);
+                    const elev = parseFloat(parts[9]);
+
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        // Update custom location fields
+                        if (dom['cl-name']) dom['cl-name'].value = locationName;
+                        if (dom['cl-lat']) dom['cl-lat'].value = lat.toFixed(4);
+                        if (dom['cl-lon']) dom['cl-lon'].value = lon.toFixed(4);
+                        if (dom['cl-tz']) dom['cl-tz'].value = !isNaN(tz) ? tz.toFixed(1) : '0';
+                        if (dom['cl-elev']) dom['cl-elev'].value = !isNaN(elev) ? elev.toFixed(1) : '0';
+
+                        // Update map
+                        if (map && marker) {
+                            const newLatLng = L.latLng(lat, lon);
+                            map.setView(newLatLng, 10);
+                            marker.setLatLng(newLatLng);
+                        }
+
+                        console.log(`EPW location parsed: ${locationName} (${lat}, ${lon})`);
+                    } else {
+                        console.error('Invalid lat/lon in EPW LOCATION line');
+                    }
+                } else {
+                    console.error('EPW LOCATION line has unexpected format');
+                }
+            } else {
+                console.warn('No LOCATION line found in EPW file');
+            }
+        } catch (error) {
+            console.error('Error parsing EPW file:', error);
+        }
+    }
+}
+
+function toggleHVACPasses(show) {
+    const dom = getDom();
+    const container = dom['hvac-sizing-passes-container'];
+    if (container) {
+        if (show) container.classList.remove('hidden');
+        else container.classList.add('hidden');
+    }
+}
+
+function toggleShadowFreqInput(show) {
+    const dom = getDom();
+    const container = dom['shadow-calc-freq-container'];
+    if (container) {
+        if (show) container.style.display = 'block';
+        else container.style.display = 'none';
+    }
+}
+
+function toggleCustomLocationFields(show) {
+    const dom = getDom();
+    const container = dom['custom-location-fields'];
+    if (container) {
+        container.style.display = show ? 'grid' : 'none';
+    }
 }
 
 /**
- * Generates an enhanced flowchart for a recipe based on its workflow type.
- * @param {string} recipeName - The name of the recipe.
- * @param {string} content - The guide content.
- * @returns {string} Empty string - flowcharts have been removed.
+ * Initialize EnergyPlus Configuration Panel button event listeners
  */
-function generateEnhancedFlowchart(recipeName, content) {
-    // Flowcharts have been removed from the application
-    return '';
-}
-
-/**
- * Generates flowchart for point-in-time simulations.
- */
-function generatePointInTimeFlowchart() {
-    return `
-    A[Generate Sky<br/>Conditions]:::input
-    B[Compile Scene<br/>Geometry]:::process
-    C[Calculate Illuminance<br/>at Sensor Points]:::process
-    D[Generate Results<br/>Visualization]:::output
-
-    A --> B --> C --> D
-
-    class A,B,C,D codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for 3-Phase annual simulations.
- */
-function generateAnnual3PhaseFlowchart() {
-    return `
-    A[Load Weather<br/>& BSDF Data]:::input
-    B{Generate Matrices?}:::decision
-    C[Run Matrix<br/>Generation]:::subprocess
-    D[Run Annual<br/>Simulation]:::process
-    E[Calculate Metrics<br/>(sDA, UDI)]:::process
-    F[Generate Results<br/>Dashboard]:::output
-
-    A --> B
-    B -->|Yes| C
-    B -->|No| D
-    C --> D --> E --> F
-
-    class A,B,C,D,E,F codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for advanced annual simulations.
- */
-function generateAnnualAdvancedFlowchart() {
-    return `
-    A[Load Multiple<br/>Data Files]:::input
-    B[Generate Core<br/>Matrices]:::subprocess
-    C[Run Advanced<br/>Calculations]:::process
-    D[Post-Process<br/>Results]:::process
-    E[Generate Analysis<br/>Dashboards]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for compliance recipes.
- */
-function generateComplianceFlowchart() {
-    return `
-    A[Configure Multiple<br/>Checks]:::input
-    B[Run Daylight<br/>Provision]:::subprocess
-    C[Run Sunlight<br/>Exposure]:::subprocess
-    D[Run View<br/>Analysis]:::subprocess
-    E[Run Glare<br/>Protection]:::subprocess
-    F[Generate Compliance<br/>Report]:::output
-
-    A --> B
-    A --> C
-    A --> D
-    A --> E
-    B --> F
-    C --> F
-    D --> F
-    E --> F
-
-    class A,B,C,D,E,F codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for electric lighting recipes.
- */
-function generateElectricFlowchart() {
-    return `
-    A[Configure Lighting<br/>System]:::input
-    B[Define Task<br/>& Surrounding Areas]:::process
-    C[Calculate Illuminance<br/>Distribution]:::process
-    D[Compute Uniformity<br/>& Compliance]:::process
-    E[Generate Standards<br/>Report]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for energy analysis recipes.
- */
-function generateEnergyFlowchart() {
-    return `
-    A[Configure Lighting<br/>& Controls]:::input
-    B[Generate Blind<br/>Operation Schedule]:::subprocess
-    C[Run Annual Illuminance<br/>with Dynamic Blinds]:::process
-    D[Calculate Lighting<br/>Energy Consumption]:::process
-    E[Generate Energy<br/>Savings Report]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for facade analysis recipes.
- */
-function generateFacadeFlowchart() {
-    return `
-    A[Define Façade<br/>Analysis Plane]:::input
-    B[Generate Annual<br/>Sky Matrix]:::process
-    C[Calculate Daylight<br/>Coefficients]:::subprocess
-    D[Compute Annual<br/>Irradiation]:::process
-    E[Generate Façade<br/>Heatmap]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
-}
-
-/**
- * Generates flowchart for annual radiation recipes.
- */
-function generateAnnualRadiationFlowchart() {
-    return `
-    A[Define Interior<br/>Sensor Grids]:::input
-    B[Generate Annual<br/>Sky Conditions]:::process
-    C[Calculate Radiation<br/>Coefficients]:::subprocess
-    D[Compute Annual<br/>Solar Load]:::process
-    E[Generate Surface<br/>Heatmaps]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
-}
-
-/**
- * Generates generic flowchart for unspecified recipes.
- */
-function generateGenericFlowchart() {
-    return `
-    A[Configure<br/>Parameters]:::input
-    B[Prepare<br/>Scene Data]:::process
-    C[Run<br/>Simulation]:::subprocess
-    D[Process<br/>Results]:::process
-    E[Generate<br/>Output]:::output
-
-    A --> B --> C --> D --> E
-
-    class A,B,C,D,E codeTheme;
-    `;
+function initializeEnergyPlusConfigPanel() {
+    document.getElementById('open-materials-panel-btn')?.addEventListener('click', openMaterialsManagerPanel);
+    document.getElementById('open-constructions-panel-btn')?.addEventListener('click', openConstructionsManagerPanel);
+    document.getElementById('open-schedules-panel-btn')?.addEventListener('click', openSchedulesManagerPanel);
+    document.getElementById('open-loads-panel-btn')?.addEventListener('click', openZoneLoadsManagerPanel);
+    document.getElementById('open-thermostats-panel-btn')?.addEventListener('click', openIdealLoadsManagerPanel);
+    document.getElementById('open-daylighting-panel-btn')?.addEventListener('click', openDaylightingManagerPanel);
+    document.getElementById('open-outputs-panel-btn')?.addEventListener('click', openOutputsManagerPanel);
+    document.getElementById('open-hvac-sizing-panel-btn')?.addEventListener('click', openHvacSizingManagerPanel);
+    document.getElementById('open-outdoor-air-panel-btn')?.addEventListener('click', openOutdoorAirManagerPanel);
+    document.getElementById('open-shading-panel-btn')?.addEventListener('click', openShadingManagerPanel);
 }
 
 /**
  * Parses the guide text, generates enhanced flowcharts, and sets up the recipe guides panel.
  */
-function setupRecipeGuidesPanel() {
-    const dom = getDom();
-
-    const guideText = `
-# Guide to the "Illuminance Map" Recipe
-
-The Illuminance Map recipe is a foundational Radiance workflow designed to perform a point-in-time daylighting analysis. Its purpose is to calculate the amount of light (illuminance, measured in lux) falling on specific surfaces within your model at a single, precise moment (e.g., the summer solstice at noon). This guide is broken down into two main parts: the essential scene setup required before using the recipe, and the specific parameters within the recipe itself.
-
-## Workflow Overview
-This recipe follows a standard point-in-time simulation workflow:
-1. Generate sky conditions for the specified date/time
-2. Compile scene geometry and materials
-3. Calculate illuminance at each sensor point
-4. Generate results visualization
-## Part 1: Foundational Scene Setup (Prerequisites)
-
-Before you can successfully run an illuminance map simulation, you must first define the physical and environmental context of your scene. The recipe depends entirely on the data configured in these panels.
-### Step 1: Model the Physical Space
-
-Your 3D model must be fully defined. This involves several key panels:
-
-#### A. Dimensions & Geometry (Toolbar Icon 2): Define the core architecture.
-- **Dimensions:** Set the room's **Width (X)**, **Length (Z)**, and **Height (Y)**.
-- **Orientation:** This is critical. It sets the building's rotation relative to North. An orientation of **0** degrees (the default) means the "South" wall in the Apertures panel faces true South, receiving the most direct sun in the northern hemisphere.
-#### B. Apertures & Shading (Toolbar Icon 3): This is where daylight enters your model.
-- **Select a Wall:** Click on a wall in the 3D view to bring up its controls.
-- **Add Windows:** Use either **WWR (Window-to-Wall Ratio)** mode for quick parametric design or **Manual** mode for specific window dimensions. At least one window is necessary for a daylighting simulation.
-- **Define Shading:** If your design includes overhangs, fins, light shelves, or louvers, you must enable and configure them here. These elements will realistically block or redirect sunlight in the simulation.
-#### C. Material Properties (Toolbar Icon 5): The properties of your surfaces determine how light reflects and distributes within the space.
-- **Set Reflectance:** For the **Walls, Floor,** and **Ceiling**, set a plausible **Reflectance** value. Typical interior values range from 0.8 for a white ceiling to 0.5 for light-colored walls and 0.2 for a dark floor.
-- **Set Glazing Transmittance:** For the **Glazing** material, set the **Transmittance**. This controls how much light passes through the glass. A value of **0.7** is a reasonable starting point for standard double-pane glazing.
-### Step 2: Establish Geographic Location & Climate
-
-The simulation calculates the sun's position and sky's brightness based on its location on Earth.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. Provide the location using one of two methods:
-    - **(Recommended) Upload EPW File:** Click **"Upload EPW File"** and select a climate data file for your desired location. This is the most accurate method and will automatically populate the Latitude and Longitude fields.
-- **Manual Entry:** If you don't have an EPW file, you can manually type the **Latitude** and **Longitude** into the input fields. The interactive map will update accordingly.
-
-### Step 3: Define the Analysis Grid (Critical)
-
-This is the most important prerequisite. You must tell Radiance *where* to perform the calculations. Without a sensor grid, the simulation has no points to measure and will fail.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Ensure the **"Illuminance Grid"** checkbox at the top is **enabled**.
-3. In the **Surface Selection** area, check the box for each surface you want to analyze. For a standard workplane analysis, you would check **"Floor"**.
-4. Configure the grid parameters for your selected surface(s). For a floor grid:
-    - **Show in 3D View:** It is highly recommended to check this to visualize where your sensors are.
-- **Spacing:** This determines the density of measurement points. A smaller value (e.g., **0.25m**) creates a more detailed, higher-resolution map but increases computation time. A larger value (e.g., **1.0m**) is faster but less detailed.
-- **Height Offset:** This sets the height of the measurement plane above the selected surface. For a standard office workplane, this should be set to **0.8 meters**.
-## Part 2: Configuring and Running the Recipe
-
-With the scene fully defined, you can now configure the Illuminance Map recipe.
-### Step 4: Configure Recipe-Specific Parameters
-1. Open the **Simulation** panel (Toolbar Icon toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Illuminance Map"**.
-3. The panel will now show settings specific to this simulation:
-    - **Sky Definition (\`gensky\`):** This sets the **exact moment in time** for the analysis. The sun's position and sky conditions will be calculated for this instant.
-- **Month, Day, Time:** Set these to the specific date and time you wish to investigate.
-- **Quality Preset:** This is a shortcut for controlling simulation accuracy vs. speed. It adjusts the core Radiance ambient parameters found in the "Global Simulation Parameters" section.
-- **Draft:** Use for very quick initial checks. Expect a "splotchy" and less accurate result.
-- **Medium:** A good balance for most design iterations.
-        - **High:** Recommended for final, presentation-quality results. This takes the longest to compute.
-    - **Grid-Based Illuminance (\`rtrace\`):** These settings control the core ray-tracing command. For this recipe, the default settings are almost always correct.
-        - **Calculation Mode:** Leave this on **Irradiance (-I)**. The script will automatically convert the final results to illuminance (lux).
-### Step 5: Generate and Run the Simulation
-1. Click the **Generate Package** button. This compiles all your scene data and recipe settings into a complete, runnable Radiance project folder, including the master simulation script.
-2. You will see the script's content appear in the text box.
-3. Click the **Run Simulation** button. The **Simulation Console** will open and display the live output from the Radiance commands (\`gensky\`, \`oconv\`, \`rtrace\`).
-4. The simulation is complete when the console reports a success message.
-### Step 6: Visualize the Results
-1. Open the **Analysis** panel (Toolbar toggle-analysis-btn).
-2. Click **Load Results File (A)**.
-3. Navigate to your project folder, then into the \`08_results\` subfolder, and select the generated illuminance file (e.g., \`MyProject_illuminance.txt\`).
-4. The application will parse the data and display a false-color heatmap on the sensor grid in the 3D viewport.
-5. The **Results Dashboard** will also appear, showing summary statistics like the minimum, maximum, and average illuminance across the grid.
-
-# Guide to the "Photorealistic Rendering" Recipe
-
-This recipe is designed to create a single, physically-based, high-dynamic range (HDR) image of your scene. It captures the lighting conditions from a specific viewpoint at a single moment in time, making it ideal for visual analysis, presentations, or as a basis for glare calculations.
-## 1. Foundational Scene Setup (Prerequisites)
-
-Before generating a rendering, you must define the complete physical and environmental context. The quality of your final image is directly dependent on the detail and accuracy of this setup.
-### Step 1: Model the Physical Space
-The 3D model must be fully defined, just as with other simulation types.
-- **A. Dimensions & Geometry (Toolbar Icon 2):** Establish the room's **Width, Length, Height,** and **Orientation**. The orientation is crucial as it dictates how sunlight will enter the space through your windows.
-- **B. Apertures & Shading (Toolbar Icon 3):** Define all windows and any shading systems. The size, placement, and type of shading will directly impact the light patterns, shadows, and overall brightness of your rendered image.
-- **C. Material Properties (Toolbar Icon 5):** The visual appearance of your scene is determined by its materials.
-- **Set Reflectance & Color:** For opaque surfaces like walls, floors, and ceilings, set the **Reflectance**. The color swatch for each material will update accordingly, giving you a preview in the 3D viewport.
-- **Set Glazing Transmittance:** For the **Glazing** material, adjust the **Transmittance** to control the clarity and brightness of the glass.
-### Step 2: Establish Geographic Location & Climate
-Radiance calculates the sun's position and the sky's appearance based on your project's location.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. Provide the location by either **uploading an EPW file** (recommended) or by **manually entering the Latitude and Longitude**.
-### Step 3: Define the Viewpoint (Critical)
-This is the most critical prerequisite for this recipe. You must tell Radiance *from where* to render the image. The final image will be generated from the exact perspective of this virtual camera.
-1. Open the **Viewpoint** panel (Toolbar Icon 7).
-2. **Set the View Type:**
-    - For standard architectural renderings, select **Perspective**.
-- For glare analysis or special visualizations, you might select **Fisheye**.
-3. **Position the Camera:** You have two main methods:
-    - **Sliders:** Use the **Position (vp)** and **Direction (vd)** sliders to numerically define the camera's location and where it's looking.
-- **(Recommended) First-Person View (FPV):** Click the **"Enter Viewpoint"** button. You can now navigate the scene using your mouse and keyboard (W, A, S, D) as if you were in a video game. This is the most intuitive way to frame the perfect shot. Click "Exit Viewpoint" when you are done.
-4. **Adjust Field of View (FOV):** The FOV slider controls the zoom or extent of the view, similar to a camera lens.
-## 2. Recipe-Specific Parameters
-
-Once the scene and viewpoint are set, you can configure the rendering recipe itself.
-### Step 4: Configure Recipe Parameters
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Photorealistic Rendering"**.
-3. The panel will display the following settings:
-    - **Sky Definition (\`gensky\`):** Sets the exact date and time for the simulation. The sun's position, color, and sky brightness will be calculated for this moment.
-- **Quality Preset:** This is a crucial setting that balances image quality against rendering time. It adjusts the core ambient calculation parameters in the "Global Simulation Parameters" section.
-- **Draft:** Very fast, but will produce a noisy, splotchy image. Good for quick lighting checks.
-- **Medium:** A good balance for most iterative design checks.
-        - **High:** Recommended for final, presentation-quality images. This will take significantly longer to compute.
-    - **Image-Based Rendering (\`rpict\`):** These parameters control the \`rpict\` command, which generates the image.
-- **Image Size & Resolution:** Set the output image dimensions in pixels using the **X Resolution** and **Y Resolution** fields.
-- **Image Sampling & Filtering:** These advanced settings control anti-aliasing. For most uses, leaving them at the preset defaults is sufficient.
-### Step 5: Generate and Run the Simulation
-1. Click the **Generate Package** button. This action compiles all your settings and creates the necessary files (\`scene.rad\`, \`materials.rad\`, \`viewpoint.vf\`) and the master simulation script (e.g., \`RUN_Project_Rendering.sh\`) in your project's \`07_scripts\` folder.
-2. Click the **Run Simulation** button. The **Simulation Console** will appear, showing the live progress from the Radiance commands.
-3. Rendering an image can take anywhere from a few seconds to many minutes, depending on your quality settings and scene complexity.
-## 3. Viewing and Analyzing the Output
-
-The simulation's primary output is a High-Dynamic Range (HDR) image.
-- **File Location:** The image (e.g., \`MyProject.hdr\`) is saved in the \`09_images/hdr\` subfolder within your project directory.
-- **Viewing the Image:**
-    1. Open the **Analysis** panel (Toolbar toggle-analysis-btn).
-2. Click **Load Results File (A)** and select the \`.hdr\` file you just generated.
-3. A new button, **View HDR Image**, will appear. Click it.
-4. The **HDR Image Viewer** will open, displaying your rendering.
-- **Analyzing in the Viewer:** The HDR viewer is a powerful tool.
-- **Exposure:** Use the slider to adjust the image's brightness, simulating how the human eye adapts to different light levels.
-- **False Color:** Enable this mode to see a heatmap of the luminance (cd/m²) in your scene, helping you identify areas that are too bright or too dark.
-- **Luminance Probe:** Hover your mouse over any point in the image to get a precise luminance reading in cd/m².
-
-# Guide to the "Daylight Glare Probability (DGP)" Recipe
-
-The Daylight Glare Probability (DGP) recipe is a specialized workflow for assessing visual discomfort within your space. It simulates a 180° fisheye image from a specific observer's point of view and analyzes it to calculate a DGP value between 0 (no perceptible glare) and 1 (unbearable glare). This guide details the essential setup steps and the recipe-specific parameters you need to configure for a correct and meaningful analysis.
-## Part 1: Foundational Scene Setup (Prerequisites)
-
-The accuracy of a glare simulation is highly sensitive to the scene's setup. The following steps are mandatory.
-
-### Step 1: Model the Physical Space
-The geometry and materials are the primary drivers of glare. Ensure they are defined accurately.
-- **Dimensions & Geometry (Toolbar Icon 2):** Set the room's **Width, Length, Height,** and especially its **Orientation**. The orientation determines which facades are exposed to direct sun at critical times of the day.
-- **Apertures & Shading (Toolbar Icon 3):** Define all windows and shading systems. Unprotected glazing is the most common cause of glare, so accurately modeling overhangs, fins, blinds, or other mitigation strategies is crucial for the analysis.
-- **Material Properties (Toolbar Icon 5):** Set realistic **Reflectance** values for all surfaces. Highly reflective or glossy materials can cause significant secondary (reflected) glare. The **Glazing Transmittance** value directly impacts how much light enters the space.
-### Step 2: Establish Geographic Location
-The sun is the primary source of daylight glare. Its position is calculated based on your project's location.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. Provide the location by either **uploading an EPW file** or by **manually entering the Latitude and Longitude**. This data is used by the \`gensky\` command in the simulation script.
-### Step 3: Define the Observer's Viewpoint (CRITICAL)
-This is the most critical step for a DGP analysis. The entire calculation is performed from a single, specific observer position and gaze direction.
-1. Open the **Viewpoint** panel (Toolbar Icon 7).
-2. **Set View Type to Fisheye:** This is **mandatory**. From the "View Type" dropdown, you must select **Fisheye (h)**. The \`evalglare\` program requires a 180° hemispherical image to correctly analyze the entire visual field. A standard "Perspective" view will produce incorrect DGP results.
-3. **Position the Observer:** Place the virtual camera at a realistic occupant location.
-- Use the **"Enter Viewpoint" (FPV)** mode for an intuitive, first-person placement (e.g., seated at a desk).
-- Alternatively, use the **Position (vp)** sliders. Pay close attention to the **Y (Height)** value, which should correspond to a typical eye height (e.g., **1.2 meters** for a seated person).
-4. **Set the Gaze Direction:** Aim the camera where an occupant would normally be looking.
-- **Pro Tip:** For a worst-case office scenario, aim the camera towards a potential computer screen location, not directly out the window. This represents a more realistic task view. Adjust the **Direction (vd)** sliders or aim the camera in FPV mode.
-## Part 2: Configuring and Running the Recipe
-
-With the scene and observer viewpoint correctly set, you can configure the simulation recipe.
-### Step 4: Configure the DGP Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Daylight Glare Probability"**.
-3. Configure the specific settings for this recipe:
-    - **Sky Definition (\`gensky\`):** Select a "worst-case" time for glare. This is often a clear day when the sun is at a low altitude and might be in the observer's field of view (e.g., an afternoon in winter). Set the **Month, Day, and Time** accordingly.
-    - **Quality Preset:** Glare is caused by very bright areas, which can be small. It is highly sensitive to rendering quality.
-        - **High (Accurate):** This setting is **strongly recommended**. The recipe defaults to high-quality ambient parameters (\`ab=6\`, \`ad=2048\`, etc.) to ensure that small, intense light sources (like specular reflections) are accurately captured. Using lower quality presets can lead to inaccurate DGP values.
-- **Daylight Glare Probability (\`evalglare\`):** These switches control the \`evalglare\` analysis program.
-        - **Create Check File (-c):** Keep this **checked**. The script will generate a verification image where all pixels identified as glare sources are highlighted in red. This is invaluable for understanding the source of the glare.
-        - **Detailed Output (-d):** Keep this **checked**. This generates a text report listing the properties (luminance, size, position) of each individual glare source found in the image.
-### Step 5: Generate and Run the Simulation
-1. Click the **Generate Package** button. The application will create all necessary files and the master script (\`RUN_..._DGP_Analysis.sh\` or \`.bat\`) in your project folder.
-2. Click the **Run Simulation** button. The console will show the progress. The script first runs \`rpict\` to render the high-quality 180° fisheye HDR image, and then runs \`evalglare\` to analyze it.
-## Part 3: Viewing and Analyzing the Output
-
-The simulation produces two key files in the \`08_results\` folder and one in the \`09_images/hdr\` folder:
-- **DGP Report (.txt):** Contains the final DGP value and detailed source information.
-- **Fisheye Image (.hdr):** The image that was analyzed.
-- **Glare Check Image (_check.hdr):** The verification image with glare sources highlighted.
-To analyze the results within Ray Modeler:
-1. Open the **Analysis** panel (Toolbar toggle-analysis-btn).
-2. Click **Load Results File (A)** and select the generated \`.txt\` report file.
-3. The **Glare Analysis Dashboard** will automatically appear, showing:
-    - The final calculated **DGP value**.
-- The total number of glare sources detected.
-    - A clickable list of each individual source.
-4. **Interactive Analysis:** Click on a source in the list. The application will project its location back into the 3D scene, highlighting the exact surface (e.g., a specific window pane, a reflective frame) that caused the glare. This provides direct, actionable feedback for your design.
-5. You can also load and view the \`.hdr\` files in the **HDR Image Viewer** for a full visual inspection.
-
-# Guide to the "Daylight Factor" Recipe
-
-This recipe automates the classic method for assessing daylight performance. It calculates the **Daylight Factor (DF)**, which is the ratio of the internal illuminance at a point to the simultaneous, unobstructed external horizontal illuminance under a standard CIE overcast sky. The result is expressed as a percentage.
-
-## 1. Foundational Scene Setup (Prerequisites)
-
-For an accurate Daylight Factor calculation, the physical characteristics of the space are paramount.
-### Step 1: Model the Physical Space
-The geometry and materials directly influence the internal light distribution.
-- **A. Dimensions & Geometry (Toolbar Icon 2):** Define the room's **Width, Length,** and **Height**. While orientation is less critical for a uniform overcast sky, it's good practice to set it correctly.
-- **B. Apertures & Shading (Toolbar Icon 3):** *This is critical.* The size, number, and placement of your windows are the primary factors determining the Daylight Factor. Define them accurately. Any external obstructions or shading devices will also significantly impact the result.
-- **C. Material Properties (Toolbar Icon 5):** The **Reflectance** of your interior surfaces (walls, floor, ceiling) is very important. Higher reflectance values will increase the *internally reflected component* of the daylight factor, leading to higher overall DF values, especially deeper in the room.
-### Step 2: Define the Analysis Grid (Critical)
-You must tell Radiance where to calculate the internal illuminance. Without a sensor grid, the simulation has no measurement points.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Ensure the **"Illuminance Grid"** checkbox is **enabled**.
-3. Under **Surface Selection**, check the box for **"Floor"** to create a standard analysis plane.
-4. Configure the grid parameters:
-    - **Spacing:** A smaller spacing (e.g., **0.5m**) will produce a more detailed DF map.
-- **Height Offset:** Set this to your desired workplane height (e.g., **0.8 meters**).
-## 2. Recipe-Specific Parameters
-
-Once the scene is modeled, you can configure the Daylight Factor recipe itself.
-### Step 3: Configure the DF Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Daylight Factor"**.
-3. The panel will display the following settings, which control the \`gensky\` Radiance command:
-    - **Quality Preset:** Controls the ambient calculation parameters for \`rtrace\`. For DF, **"Medium (Balanced)"** is usually sufficient for reliable results.
-- **\`gensky\` Parameters for DF:**
-        - **Sky Type:** For a standard Daylight Factor calculation, this **must be set to Overcast (-c)**. This creates the uniform, diffuse sky condition required by the DF definition.
-- **Ground Reflectance (-g):** This simulates the light reflecting from the ground outside the building. A value of **0.2** is standard.
-        - **Diffuse Horizontal Irradiance (-B):** This is a technical but crucial parameter. To achieve the standard reference exterior illuminance of 10,000 lux for DF calculations, the script uses a specific horizontal irradiance value of **55.866 W/m²**. You should not change this value for a standard DF analysis.
-## 3. Generating and Running the Simulation
-
-After configuring the parameters, follow these steps to execute the analysis.
-### Step 4: Generate and Run
-1. Click the **Generate Package** button. This action compiles your scene and settings into a complete Radiance project, including the executable script (\`RUN_..._Daylight_Factor.sh\` or \`.bat\`).
-2. Click the **Run Simulation** button. The **Simulation Console** will appear, showing the progress.
-The script performs the following key steps:
-    - \`gensky\`: Creates the overcast sky.
-- \`oconv\`: Compiles the scene geometry and sky into an octree file.
-- \`rtrace\`: Calculates the interior illuminance at each point on your sensor grid.
-- \`rcalc\`: Takes the \`rtrace\` results and calculates the final percentage: \`DF = (Internal Lux / 10,000 Lux) * 100\`.
-## 4. Viewing and Analyzing the Output
-
-The simulation produces a text file in your project's \`08_results\` folder (e.g., \`MyProject_df_results.txt\`).
-- **Content:** This file contains a single column of numbers. Each number is the calculated **Daylight Factor as a percentage** for one sensor point.
-- **Visualization:**
-    1. Open the **Analysis** panel.
-2. Click **Load Results File (A)** and select the generated \`_df_results.txt\` file.
-3. The application will display a false-color heatmap on the 3D sensor grid, allowing you to visually assess the daylight distribution. Areas with DF above 2% are generally considered well daylit.
-
-# Guide to the "Annual daylight (3-Phase)" Recipe
-
-The Annual Daylight (3-Phase) recipe is a powerful and efficient method for calculating hourly illuminance levels across a full year (8,760 hours). It is particularly useful for analyzing designs with complex fenestration systems (like blinds, frits, or electrochromic glass) because it decouples the simulation into independent phases. This means you can swap out the glazing system without having to re-run the entire time-consuming simulation from scratch. This guide will walk you through the entire workflow, from preparing your model to analyzing the final annual results.
-## Part 1: Foundational Scene Setup (Prerequisites)
-
-The accuracy of the 3-Phase method depends on a complete and correct definition of your scene. All steps in this section are mandatory.
-
-### Step 1: Model the Physical Space
-The geometry and materials of your room form the basis for the core simulation matrices.
-- **A. Dimensions & Geometry (Toolbar Icon 2):** Define the room's **Width, Length, Height,** and **Orientation**.
-- **B. Apertures & Shading (Toolbar Icon 3):** Accurately model all windows and any static shading devices (like overhangs or fins). The geometry of these elements is baked into the Daylight and View matrices.
-- **C. Material Properties (Toolbar Icon 5):**
-    - Set the **Reflectance** for all interior surfaces (walls, floor, ceiling). These values are critical for accurately calculating the internally reflected light.
-- The material named \`glass_mat\` is specially treated by the simulation script as the boundary between the interior and the exterior sky. The transmittance value you set here is primarily for 3D viewport visualization; the actual optical properties for the simulation will come from the BSDF file.
-### Step 2: Define the Analysis Grid (Critical)
-The sensor grid defines the points where illuminance will be calculated. This grid is the input for generating the **View Matrix (V)**.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Enable the **"Illuminance Grid"** and, under **Surface Selection**, check the box for the surfaces you want to analyze (typically the **"Floor"**).
-3. Set the **Height Offset** to your desired workplane height (e.g., **0.8 meters**). The **Spacing** will determine the resolution of your final results.
-### Step 3: Acquire and Load External Data Files (Critical)
-The 3-Phase method requires two specific external data files. You must provide these yourself.
-- **A. EPW Weather File:**
-    - **What it is:** An EnergyPlus Weather (EPW) file contains hourly climate data for a specific location for an entire year, including solar radiation values.
-- **Why it's needed:** The recipe uses this file with the \`gendaymtx\` command to generate the **Sky Matrix (S)**, which describes the brightness of 145 different patches of the sky for all 8,760 hours of the year.
-- **Where to get it:** You can download free EPW files from several official repositories:
-        - EnergyPlus Weather Database: The primary source, with thousands of locations worldwide.
-- Ladybug Tools EPWMap: A user-friendly map for finding and downloading weather files.
-- **How to load it:** In the **Project Setup** panel, click **"Upload EPW File"** and select the \`.epw\` file you downloaded. The project's Latitude and Longitude will be updated automatically.
-- **B. BSDF XML File:**
-    - **What it is:** A Bidirectional Scattering Distribution Function (BSDF) file is a standard format (.xml) that describes the complex angular transmission and reflection properties of a fenestration system.
-- **Why it's needed:** This file represents the **Transmission Matrix (T)**. The \`dctimestep\` command uses it to calculate how much light from each of the 145 sky patches passes through the glazing at every possible angle.
-- **Where to get it:**
-        - Window Manufacturers: Many manufacturers provide BSDF files for their specific products.
-- LBNL International Glazing Database (IGDB): A large collection of glazing data that can be used in the free **LBNL WINDOW** software to generate custom BSDF files for complex assemblies (e.g., double-glazing with an interior blind).
-- **How to load it:** In the **Material Properties** panel, under the **Glazing** section, enable the **"Add BSDF" toggle and upload your \`.xml\` file**.
-## Part 2: Configuring and Running the Recipe
-
-With the scene fully prepared, you can now configure and run the simulation.
-### Step 4: Configure the 3-Phase Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Annual Daylight (3-Phase)"**.
-3. The panel will display the following settings:
-    - **Quality Preset:** This is a crucial setting. The matrix generation step is computationally expensive. It is **highly recommended to use the "High (Accurate)" preset**. This ensures your core matrices (\`view.mtx\` and \`daylight.mtx\`) are precise and can be reused for future analyses without recalculation.
-- The UI will also show fields for the **Weather File** and **BSDF File**, confirming that they are linked from the other panels.
-### Step 5: The Two-Script Workflow
-The 3-Phase method separates the simulation into two stages. When you click "Generate Package," two scripts are created to manage this process. You must run them in order.
-1. **Generate the Scripts:** Click the **Generate Package** button. This creates your project folder structure and saves two scripts in the \`07_scripts\` folder.
-2. **Run Script 1: \`RUN_..._3ph_Matrix_Generation.sh\`**
-    - **What it does:** This script runs the time-consuming \`rcontrib\` command twice to create the geometry-dependent matrices.
-- **Daylight Matrix (D):** Traces rays from the exterior of the glazing *outwards* to the sky to determine how much of the sky each window can see.
-- **View Matrix (V):** Traces rays from the sensor points *outwards* through the glazing to determine what each sensor point "sees" through the window.
-- **When to run it:** You only need to run this script **once** for a given room geometry, sensor grid, and interior material setup.
-3. **Run Script 2: \`RUN_..._3ph_Annual_Simulation.sh\`**
-    - **What it does:** This script is much faster. It first runs \`gendaymtx\` to generate the **Sky Matrix (S)** from your EPW file. Then, it uses the \`dctimestep\` command to multiply all four matrices together (V x T x D x S) for every hour of the year, producing the final illuminance results.
-- **When to run it:** You can run this script repeatedly. If you want to test a different glazing system, simply load a new BSDF file in the UI, regenerate the package (this will update the file link), and re-run **only this second script**.
-## Part 3: Viewing and Analyzing the Output
-
-- **File Output:** The final result is a binary \`.ill\` file (e.g., \`MyProject.ill\`) saved in your \`08_results\` folder. It contains 8,760 hourly illuminance values for every sensor point.
-- **Analysis in Ray Modeler:**
-    1. Open the **Analysis** panel.
-2. Click **Load Results File (A)** and select the \`.ill\` file.
-3. The application will automatically detect the annual data format and enable advanced analysis tools:
-        - **Results Dashboard:** View key annual performance metrics like **sDA (Spatial Daylight Autonomy)** and **UDI (Useful Daylight Illuminance)**.
-- **Time-Series Explorer:** Use the **Time Scrubber** to visualize the illuminance heatmap on your 3D model for any hour of the year.
-- **Temporal Map:** Right-click a sensor point in the 3D view to open a detailed 24x365 heatmap showing the hourly performance of that specific location.
-
-# Guide to the "sDA & ASE (LM-83)" Recipe
-
-The sDA & ASE (LM-83) recipe automates the full simulation workflow required by the IES standard LM-83-12 for calculating **Spatial Daylight Autonomy (sDA)** and **Annual Sun Exposure (ASE)**. Instead of just calculating daylight for a static scene, this recipe simulates a "virtual occupant" who operates the blinds based on direct sunlight. The final result for sDA is a combination of hours when the blinds are open and hours when they are closed, providing a much more realistic prediction of annual daylight performance.
-## The Detailed Workflow Explained
-
-The script generated by this recipe orchestrates a complex, multi-step simulation using the Radiance 3-Phase Method as its foundation. Understanding these steps is key to interpreting the results correctly.
-1.  **Generate Annual Sky Descriptions:** The process begins by reading your **EPW weather file**. From this, it generates two 8760-hour sky descriptions (matrices):
-    - **Total Sky Matrix:** Represents the light from both the diffuse sky and the direct sun for every hour of the year.
-- **Direct Sun-Only Sky Matrix:** Represents *only* the light coming directly from the sun for every hour. This is crucial for identifying glare potential.
-2.  **Calculate Annual Direct Illuminance:** The script then performs an initial annual simulation using only the **direct sun-only sky matrix** and your **"blinds open" BSDF file**. This calculates, for every sensor point and every hour, how much light is received *only* from the direct sun passing through the unshaded windows.
-3.  **Calculate Annual Sun Exposure (ASE):** The results from the previous step are used to calculate ASE. The standard defines ASE as the percentage of the workplane that receives at least **1000 lux** of direct sunlight for at least **250 hours** per year.
-4.  **Generate a Dynamic Blind Schedule:** A Python script (\`process_sDA.py\`) analyzes the direct illuminance results from Step 2. It acts as a virtual occupant with the following logic for each occupied hour:
-    - It checks how many sensor points on the grid are receiving more direct sunlight than the specified **Illuminance Threshold** (default is 1000 lux).
-- If the percentage of points exceeding the threshold is greater than the **Area Trigger** (default is 2%), the script assumes the blinds are closed for that hour. - Otherwise, the blinds remain open.
-    - This process creates an 8760-hour schedule file (\`blinds.schedule\`) where each hour is marked as **0** (open) or **1** (closed).
-5.  **Calculate Total Annual Illuminance (Blinds Open):** A second full annual simulation is run. This time, it uses the **total sky matrix** and the **"blinds open" BSDF file**. This produces an 8760-hour illuminance file (\`results_open.ill\`) for the scenario where blinds are never used.
-6.  **Calculate Total Annual Illuminance (Blinds Closed):** A third full annual simulation is run, using the **total sky matrix** and the **"blinds closed" BSDF file**. This produces another 8760-hour illuminance file (\`results_closed.ill\`) for the scenario where the blinds are always down.
-7.  **Combine Results for Final sDA Calculation:** The Python script runs a final time. It reads the \`blinds.schedule\` and creates a final, combined results file (\`<project>_sDA_final.ill\`). For each hour:
-    - If the schedule says **0** (open), it copies the illuminance data for that hour from \`results_open.ill\`.
-- If the schedule says **1** (closed), it copies the data for that hour from \`results_closed.ill\`.
-- This final, combined file is what you use to accurately calculate sDA.
-## Step-by-Step Guide to Run the sDA & ASE Recipe
-
-Follow these steps precisely to set up and execute the simulation.
-### Part 1: Prerequisite Steps (MUST be done first)
-
-#### Step 1: Generate the V and D Matrices
-This recipe relies on pre-computed matrices that describe how light moves through your scene. These must be generated *before* you run the sDA/ASE simulation.
-1. Click the **Simulation** button on the left toolbar to open the **Simulation** panel.
-2. In the **Recipe Selector** dropdown, choose **Recipe: Annual Daylight (3-Phase)**.
-3. Load your **Weather File (.epw)** and your primary **BSDF File (.xml)** for your glazing.
-4. Click **Generate Package**.
-5. Click **Run Simulation** and wait for the process to complete in the console. This step can take a significant amount of time.
-
-#### Step 2: Set Up Core Project Data
-Before configuring the recipe, ensure your base project is set up correctly.
-- **Location & Climate:** Open the **Project Setup** panel. Click **Upload EPW File** and select your climate file. This is mandatory for any annual analysis.
-- **Sensor Grid:** Open the **Sensor Grid** panel.
-- Ensure the **Illuminance Grid** checkbox is enabled.
-    - Under **Surface Selection**, ensure the **Floor** checkbox is checked. The sensor points on the floor represent the workplane where sDA and ASE are measured.
-- **Occupancy Schedule (Recommended):** Open the **Project Setup** panel again.
-    - Check the **Generate Occupancy Schedule** box.
-- Set the occupied days and time range appropriate for your building.
-    - Click **Generate & Save Schedule**. This creates an \`occupancy.csv\` file that the analysis will use to filter for relevant hours.
-### Part 2: Configure and Run the sDA & ASE Recipe
-
-#### Step 3: Configure the Recipe Inputs
-1. Open the **Simulation** panel.
-2. From the **Recipe Selector** dropdown, choose **Recipe: sDA & ASE (LM-83)**.
-3. Fill in the required inputs in the panel that appears:
-    - **Weather File (.epw):** Select the same EPW file you loaded in the Project Setup panel.
-- **BSDF - Blinds Open (.xml):** Provide a BSDF XML file that represents your glazing system *without any shading devices*.
-- **BSDF - Blinds Closed (.xml):** Provide a second BSDF XML file that represents your glazing system *with the blinds or shades fully deployed*.
-- **Illuminance Threshold (lux):** This is the level of *direct* sunlight on the workplane that triggers the virtual occupant to close the blinds. The IES LM-83 standard recommends a default value of **1000 lux**.
-- **Area Trigger (%):** This is the percentage of the workplane that must exceed the illuminance threshold before the blinds are closed. The standard recommends a default of **2%**.
-
-#### Step 4: Generate and Run the Simulation
-1. Click the **Generate Package** button. This creates the necessary script files (\`.sh\`, \`.bat\`) and the Python helper script (\`process_sDA.py\`) in your project's \`07_scripts\` folder.
-2. Click the **Run Simulation** button. The simulation console will appear and show the progress as it moves through the multiple \`dctimestep\` calculations and Python script executions.
-## Analyzing Your Results
-
-Once the simulation completes, you will have two primary result files in your \`08_results\` folder. You must load them separately to see the correct metrics.
-- **To Analyze Annual Sun Exposure (ASE):**
-    1. Click the **Analysis** button on the left toolbar to open the **Analysis** panel.
-2. Click **Load Results File (A)**.
-    3. Select the file named \`<project_name>_ASE_direct_only.ill\`.
-    4. The **Results Dashboard** will appear. Look for the **Annual Metrics Dashboard** to see the calculated **ASE percentage**.
-- **To Analyze Spatial Daylight Autonomy (sDA):**
-    1. In the **Analysis** panel, click **Load Results File (A)** again (this will replace the ASE file).
-2. Select the file named \`<project_name>_sDA_final.ill\`.
-    3. The **Results Dashboard** will update, and the **Annual Metrics Dashboard** will now show the calculated **sDA percentage**, which correctly accounts for the hours the blinds were closed.
-## Detailed Parameter Summary
-
-| Parameter/Input | UI Location | Purpose & Requirements | Recommended Setting / Notes |
-| :--- | :--- | :--- | :--- |
-| View & Daylight Matrices | (Generated) | Foundational geometry matrices (\`view.mtx\`, \`daylight.mtx\`). Must be generated by running the \`Annual Daylight (3-Phase)\` recipe first. | Use high-quality Radiance parameters (\`-ab 7\`, \`-ad 4096\`, etc.) for matrix generation. |
-| EPW Weather File | \`Project Setup\` & \`sDA Recipe\` | Provides 8760 hours of sun and sky data. Mandatory. | Select the file for your project's location. |
-| Sensor Grid | \`Sensor Grid\` | Defines the points on the workplane for calculation. A floor grid is required. | Spacing of 0.5m - 1.0m is typical. Offset should match workplane height (e.g., 0.8m). |
-| BSDF - Blinds Open | \`sDA Recipe\` | XML file describing the clear glazing system (no shades). | This is the baseline for your window's performance. |
-| BSDF - Blinds Closed | \`sDA Recipe\` | XML file describing the glazing system *with* the shading device deployed. | Critical for simulating the dynamic behavior. |
-| Illuminance Threshold | \`sDA Recipe\` | The direct illuminance level (lux) that triggers the blinds. | \`1000 lux\` (IES LM-83 default). |
-| Area Trigger | \`sDA Recipe\` | The percentage of the grid that must exceed the threshold to close the blinds. | \`2%\` (IES LM-83 default). |
-| Occupancy Schedule | \`Project Setup\` | An 8760-hour CSV file defining occupied hours. Filters results. | Generate from the UI for accuracy. If omitted, a default schedule is used for analysis. |
-
-# Guide to the "Annual Daylight (5-Phase)" Recipe
-
-The 5-Phase Method is an advanced annual daylighting simulation technique that provides higher accuracy than the standard 3-Phase method. It is particularly effective for spaces with complex fenestration systems (CFS) like venetian blinds, prismatic glazing, or fabrics, as it more accurately models the behavior of direct sunlight.
-## The Detailed Workflow Explained
-
-The script generated by this recipe automates a complex series of matrix calculations to produce a final, high-fidelity annual illuminance result.
-1.  **Generate Core Matrices:** The process begins by creating the foundational matrices that describe your scene's geometry and the annual sky conditions:
-    - **View Matrix (V):** Describes the path of light from the *interior side of the windows* to the *sensor points* on your grid.
-- **Daylight Matrix (D):** Describes how light from the diffuse sky reaches the *exterior of your windows*.
-- **Sky Matrix (S):** Describes the light contribution from the entire sky (diffuse sky + direct sun) for all 8760 hours, based on your EPW file.
-- **Direct Sun-Only Sky Matrix (S_direct):** A special sky matrix containing *only* the direct sun component for all 8760 hours.
-2.  **Calculate Total Illuminance (3-Phase Method):** The script first calculates the total annual illuminance using a standard 3-Phase approach. It combines the **View (V)**, **Daylight (D)**, and **total Sky (S)** matrices with your standard **Klems BSDF** file. This result is named \`total_3ph.ill\`.
-3.  **Calculate the "Inaccurate" Direct Component:** It runs a second 3-Phase calculation, this time combining the **V**, **D**, and **Klems BSDF** matrices with the **direct-sun-only sky matrix (S_direct)**. This isolates the contribution of direct sun as calculated by the lower-resolution Klems BSDF. This result is named \`direct_3ph.ill\`.
-4.  **Calculate the "Accurate" Direct Component:** This is the key step of the 5-Phase method. The script runs a third 3-Phase calculation, again using the **direct-sun-only sky matrix (S_direct)**, but this time it substitutes the standard Klems BSDF with the special, high-resolution **Tensor Tree BSDF** file. This accurately models how direct sun rays are transmitted and scattered. This result is named \`direct_5ph.ill\`.
-5.  **Combine for Final Result:** The script performs a final matrix operation using \`rmtxop\` to produce the final result file (\`<project_name>_5ph_final.ill\`): **Final Result = (Total 3-Phase Illuminance) - (Inaccurate Direct Component) + (Accurate Direct Component)**. This step effectively replaces the low-resolution direct sun calculation within the total result with the high-resolution one, yielding a final, highly accurate annual illuminance file.
-## Required Input Files
-
-This recipe requires **three specific files** that you must provide. Two of these are special BSDF files that must be generated using external software (like LBNL WINDOW and the command-line \`genBSDF\` tool).
-- **Weather File (.epw):** Your project's standard EnergyPlus Weather file.
-- **Klems BSDF (.xml):** This is the standard, full Klems basis BSDF file for your glazing system. It models how both diffuse light and sunlight are transmitted.
-- **Tensor Tree BSDF (.xml):** This is a special, high-angular-resolution BSDF file. Its purpose is to very accurately model the transmission of the direct sun component. You must provide a separate XML file generated in this format for the recipe to work.
-## In-App Step-by-Step Guide
-
-Follow these steps precisely to set up and execute the simulation within Ray Modeler.
-### Part 1: Core Project Setup
-Before configuring the recipe, ensure your base project is set up correctly.
-- **Location & Climate:** Open the **Project Setup** panel. Click **Upload EPW File** and select your project's climate file. This is mandatory for any annual simulation.
-- **Sensor Grid:** Open the **Sensor Grid** panel. Ensure the **Illuminance Grid** checkbox is enabled, and that the **Floor** grid checkbox is checked. The sensor points on the floor represent the workplane where illuminance will be calculated.
-- **Glazing BSDF:** Open the **Materials** panel. In the **Glazing** section, check the **Add BSDF** box and upload your primary **Klems BSDF** file. While the recipe will ask for this file again, setting it here ensures your project file is complete.
-### Part 2: Configure the 5-Phase Recipe
-1. Open the **Simulation** panel by clicking the **Simulation** icon on the left toolbar.
-2. From the **Recipe Selector** dropdown, choose **Recipe: Annual Daylight (5-Phase)**.
-3. Fill in the required file inputs in the panel that appears:
-    - **Weather File (.epw):** Click to select the same EPW file you loaded in your Project Setup.
-- **Klems BSDF (T):** Click to upload your standard, full Klems BSDF file.
-- **Tensor Tree BSDF (for Cds):** Click to upload the special Tensor Tree BSDF file required for the high-resolution direct sun calculation.
-### Part 3: Generate and Run the Simulation
-1. Click the **Generate Package** button. This creates the necessary script files (\`.sh\`, \`.bat\`) in your project's \`07_scripts\` folder.
-2. Click the **Run Simulation** button. The simulation console will appear and show the progress as it generates all the required matrices and combines them. This is a very computationally intensive process and may take a long time to complete.
-## Analyzing Your Results
-
-Once the simulation completes, you will have one primary result file in your \`08_results\` folder, ready for analysis.
-1. Click the **Analysis** button on the left toolbar to open the **Analysis** panel.
-2. Click **Load Results File (A)**.
-3. Select the file named \`<project_name>_5ph_final.ill\`.
-4. The **Results Dashboard** will appear. The **Annual Metrics Dashboard** will now show the calculated **sDA** and **UDI** percentages based on this high-accuracy simulation.
-## Detailed Parameter Summary
-
-| Parameter/Input | UI Location | Purpose & Requirements | Recommended Setting / Notes |
-| :--- | :--- | :--- | :--- |
-| EPW Weather File | \`Project Setup\` & \`5-Phase Recipe\` | Provides 8760 hours of sun and sky data. Mandatory. | Select the file for your project's location. |
-| Sensor Grid | \`Sensor Grid\` | Defines the points on the workplane for calculation. A floor grid is required. | Spacing of 0.5m - 1.0m is typical. Offset should match workplane height (e.g., 0.8m). |
-| Klems BSDF | \`Materials\` & \`5-Phase Recipe\` | The standard XML file for your window system. Used for diffuse light and the baseline total illuminance calculation. | Required for the **T** matrix. |
-| Tensor Tree BSDF | \`5-Phase Recipe\` | A special, high-resolution XML file for your window system. Used for accurately calculating the direct sun component. | Crucial for the method. Must be generated externally. |
-| Global Sim Parameters | \`Simulation Panel\` | Radiance quality settings (\`-ab\`, \`-ad\`, etc.) used for matrix generation. | Use high-quality settings (\`-ab 7\`, \`-ad 4096\`, etc.) for best results. The recipe defaults to these. |
-
-# Guide to the "Imageless Annual Glare" Recipe
-
-The Imageless Annual Glare recipe performs an advanced, year-long glare analysis without rendering thousands of individual images. Instead, it uses a matrix-based calculation method (\`rcontrib\` and \`dcglare\`) to efficiently compute the **Daylight Glare Probability (DGP)** for every occupied hour of the year at multiple viewpoints simultaneously. This is the industry-standard method for assessing long-term visual discomfort and is essential for compliance with standards like **EN 17037**. The final outputs are the annual DGP time-series, **Glare Autonomy (GA)**, and **Spatial Glare Autonomy (sGA)**.
-## The Detailed Workflow Explained
-
-The script generated by this recipe follows a precise workflow to calculate annual glare.
-1.  **Create Scene Octree:** It compiles all your scene geometry (room, shading, context) and materials into a single Radiance octree file for efficient ray tracing.
-2.  **Generate Annual Sky Matrix:** It reads your **EPW weather file** and generates an 8760-hour sky matrix (\`sky.mtx\`) that describes the brightness of the entire sky dome for every hour of the year.
-3.  **Calculate Direct Daylight Coefficients (D_direct):** Using \`rcontrib\`, the script traces rays from your viewpoints *out* into the scene and calculates how much light reaches them *after only one bounce* (\`-ab 1\`). This matrix (\`dc_direct.mtx\`) isolates the light contribution from the first reflection, which is crucial for identifying glare sources.
-4.  **Calculate Total Daylight Coefficients (D_total):** The script runs \`rcontrib\` again, but this time with a high number of ambient bounces (\`-ab 8\`). This matrix (\`dc_total.mtx\`) captures the total illuminance at the viewpoints, including all inter-reflections, which is needed to determine the background luminance for the DGP calculation.
-5.  **Calculate Annual DGP:** The \`dcglare\` tool combines the two coefficient matrices (Direct and Total) with the annual sky matrix. It then calculates the DGP value for every viewpoint for every occupied hour of the year, saving the results to \`<project_name>.dgp\`.
-6.  **Calculate Glare Autonomy (GA):** The script runs \`dcglare\` a second time. This time, it uses a DGP threshold (e.g., 0.40) to determine the percentage of occupied hours that each viewpoint is *free* of glare. The results are saved to \`<project_name>.ga\`.
-7.  **Calculate Spatial Glare Autonomy (sGA):** Finally, \`rcalc\` processes the Glare Autonomy file to determine the percentage of *viewpoints* that meet a specific target (e.g., being glare-free for 95% of the time). This single percentage is the final sGA metric.
-
-## Required Input Files & Setup
-
-This recipe requires specific inputs to be configured correctly in the UI before you can run it.
-- **Weather File (.epw):** Your project's standard EnergyPlus Weather file, which provides the annual sky conditions.
-- **View Grid (.ray):** This is **the most critical input** for this recipe. It's a file containing the starting positions and directions of thousands of rays, representing multiple viewpoints within your scene. You must generate this within the Ray Modeler application.
-- **Occupancy Schedule (.csv) (Optional but Recommended):** An 8760-hour schedule file that tells the simulation which hours to consider for the analysis. If not provided, a default schedule is assumed by the analysis tools.
-## In-App Step-by-Step Guide
-
-Follow these steps precisely to set up and execute the simulation.
-### Part 1: Core Project Setup
-- **Location & Climate:** Open the **Project Setup** panel. Click **Upload EPW File** and select your project's climate file.
-- **Generate a View Grid:** This is the most important step for this recipe.
-    1. Open the **Sensor Grid** panel.
-2. Check the box for **View Grid (for Glare)**. This will reveal the view grid controls.
-3. **Spacing:** Set the distance between each viewpoint on the floor plan (e.g., 0.75m).
-4. **Height Offset:** Set the height of the viewpoints above the floor, representing eye level (e.g., 1.2m).
-5. **Number of Directions:** Set how many directions will be analyzed from each point (e.g., 6 directions will cover a 360° view in 60° increments).
-6. Check **Show in 3D View** to see a visualization of the viewpoints and their directions as arrows.
-- **Generate an Occupancy Schedule:** In the **Project Setup** panel:
-    1. Check the **Generate Occupancy Schedule** box.
-2. Set the occupied days and time range for your building.
-    3. Click **Generate & Save Schedule**.
-### Part 2: Configure the Imageless Glare Recipe
-1. Open the **Simulation** panel by clicking the **Simulation** icon on the left toolbar.
-2. From the **Recipe Selector** dropdown, choose **Recipe: Imageless Annual Glare**.
-3. Fill in the required inputs in the panel that appears:
-    - **Weather File (.epw):** Select the same EPW file you loaded in your Project Setup.
-- **Occupancy Schedule (.csv) (Optional):** Select the \`occupancy.csv\` file you generated. The script will automatically look for this in your project folder.
-- **Glare Threshold (DGP):** Set the DGP value that defines a "glare event". A common value is **0.40**.
-- **Spatial Glare Autonomy Target (%):** Set the percentage of time a viewpoint must be glare-free to pass the GA test. A common target is **95%**.
-
-### Part 3: Generate and Run the Simulation
-1. Click the **Generate Package** button. This creates the script files (\`.sh\`, \`.bat\`) in your project's \`07_scripts\` folder.
-2. Click the **Run Simulation** button. The simulation console will appear and show the progress as it generates the matrices and runs \`dcglare\`. This is a computationally intensive process.
-
-## Analyzing Your Results
-
-After the simulation completes, you can analyze the output to understand the annual glare performance.
-1. Open the **Analysis** panel.
-2. Click **Load Results File (A)**.
-3. Select the file named \`<project_name>.dgp\`.
-4. The **Annual Glare Controls** section will appear in the Analysis panel.
-5. Click the **Generate Glare Rose Diagram** button. A new window will open, showing a polar chart that visualizes the number of glare hours based on the sun's position in the sky. This helps you identify which solar positions are causing the most frequent glare.
-
-## Detailed Parameter Summary
-
-| Parameter/Input | UI Location | Purpose & Requirements | Recommended Setting / Notes |
-| :--- | :--- | :--- | :--- |
-| View Grid | \`Sensor Grid\` | **Mandatory.** Defines the multiple viewpoints and directions for the imageless analysis. The script generates a \`.ray\` file from these settings. | A 1.2m height offset is typical for a seated observer. 6-8 directions provide good coverage. |
-| EPW Weather File | \`Project Setup\` & \`Imageless Glare Recipe\` | Provides 8760 hours of sun and sky data. Mandatory for annual analysis. | Select the file for your project's location. |
-| Occupancy Schedule | \`Project Setup\` & \`Imageless Glare Recipe\` | An 8760-hour CSV file defining occupied hours. This filters the glare analysis to only include relevant times. | Highly recommended for accurate GA and sGA results. |
-| DGP Threshold | \`Imageless Glare Recipe\` | The Daylight Glare Probability value above which an hour is considered to have discomforting glare. | """0.40 is a common threshold for ""disturbing"" glare.""" |
-| sGA Target | \`Imageless Glare Recipe\` | The percentage of occupied time a single viewpoint must be *below* the DGP threshold to be considered "glare-free". | """95% is a common target (i.e., allowing glare for up to 5% of the time).""" |
-| Global Sim Parameters | \`Simulation Panel\` | Radiance quality settings (\`-ab\`, \`-ad\`, etc.) used for the matrix calculations. | High-quality parameters (\`-ab 8\`, \`-ad 4096\`, etc.) are essential for accurate glare results. The recipe defaults to these. |
-
-# Guide to the "Spectral Analysis (Lark)" Recipe
-
-This recipe calculates the full spectral power distribution of light at each sensor point. It then uses a Python script to post-process this data and compute key circadian metrics, such as Circadian Stimulus (CS), Equivalent Melanopic Lux (EML), and Correlated Color Temperature (CCT). This is essential for analyses focused on WELL Building Standards or human-centric lighting design.
-## Part 1: Foundational Scene Setup (Prerequisites)
-
-This recipe has unique and critical data requirements beyond the standard geometric setup.
-### Step 1: Model the Physical Space
-The geometry and shading must be accurately defined as they would be for any other simulation.
-- **Dimensions, Apertures, Shading:** Define your room's geometry, windows, and any shading devices. These elements control the amount and direction of light entering the space.
-### Step 2: Define the Analysis Grid
-You must tell Radiance where to perform the spectral calculations.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Enable the **Illuminance Grid** and select the surfaces for analysis (e.g., **Floor**).
-3. Set the grid's **Spacing** and **Height Offset**.
-
-### Step 3: Acquire and Load Spectral Data Files (CRITICAL)
-This is the most important prerequisite. This recipe requires specific text files that describe the spectral properties of your materials and light sources.
-- **A. Material Spectral Reflectance Data (SRD):**
-    - **What it is:** A simple two-column text file (\`.dat\` or \`.txt\`) where the first column is wavelength (in nanometers) and the second is the material's reflectance at that wavelength.
-- **Why it's needed:** The recipe uses this data to create spectrally-accurate materials for the simulation. The script automatically bins this data into the 9 channels required for the Lark method.
-- **Where to get it:**
-        - From building material manufacturers.
-- From scientific material databases (e.g., REFPROP).
-        - By measuring physical samples with a spectrometer.
-- **How to load it:**
-        1. Go to the **Material Properties** panel (Toolbar Icon 5).
-2. For **Walls, Floor,** and/or **Ceiling**, switch the **Reflectance Mode** from "Simple" to **"Spectral"**.
-3. Click the file input to upload your \`.dat\` file for each material.
-- **B. Sun & Sky Spectral Power Distribution (SPD):**
-    - **What it is:** Two separate two-column text files (\`.spd\` or \`.txt\`) describing the spectral composition (energy at each wavelength) of direct sunlight and diffuse skylight, respectively.
-- **Why it's needed:** The recipe uses these files to generate a spectrally-correct sky model. It bins the data from these files to determine the "color" of the sun and sky for the simulation.
-- **Where to get it:** You can find standard illuminant data (like CIE Standard Illuminant D65 for the sky) from various scientific sources or generate them using specialized software.
-- **How to load it:** These files are uploaded directly within the recipe panel itself, as described in the next section.
-## Part 2: Configuring and Running the Recipe
-
-With the scene and spectral data prepared, you can configure the simulation.
-### Step 4: Configure the Spectral Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Spectral Analysis (Lark)"**.
-3. The panel will display the following settings:
-    - **9-Channel Simulation Toggle:** Keep this **checked**. This enables the high-accuracy, 9-channel simulation which is the core of this recipe.
-- **Sky & Sun Definition:** Unlike other recipes, this one uses direct radiometric inputs instead of relying on an EPW file for a single time point.
-- **Month, Day, Time:** Used to calculate the sun's position.
-- **Direct Normal Irradiance (DNI):** The amount of solar radiation received per unit area by a surface held perpendicular to the sun's rays.
-- **Diffuse Horizontal Irradiance (DHI):** The solar radiation from the sky (excluding the direct sunbeam) falling on a horizontal surface.
-- You would typically source DNI and DHI values from a weather file for your desired time.
-- **Spectral Data Files:** Upload your **Sun SPD** and **Sky SPD** files here.
-- **Quality Preset:** It's recommended to use **"Medium"** or **"High"** quality to ensure accurate results, as spectral simulations can be sensitive to calculation parameters.
-### Step 5: Generate and Run the Simulation
-1. Click the **Generate Package** button. This creates a highly specialized shell script (.sh) that automates the complex multi-pass simulation.
-2. Click the **Run Simulation** button. The console will show the progress. The script performs a multi-step process:
-    - **Material Generation:** Creates three different material files, one for each of the three RGB passes (totaling 9 channels).
-- **Sky Generation:** Bins the SPD data and scales it to match the brightness defined by the DNI/DHI values.
-- **Triple Simulation:** Runs the Radiance \`rtrace\` command **three separate times**, once for each spectral band.
-- **Result Combination:** Merges the three output files into a single 9-column results file (\`results_9channel.res\`).
-- **Post-Processing:** Runs a built-in Python script (\`process_spectral.py\`) that reads the 9-channel data and calculates all the final circadian and spectral metrics.
-## Part 3: Viewing and Analyzing the Output
-
-- **File Output:** The recipe's primary outputs are two files saved in the \`08_results/spectral_9ch\` folder: \`circadian_per_point.csv\` and \`circadian_summary.json\`.
-- **Analysis in Ray Modeler:**
-    1. Open the **Analysis** panel.
-2. Click **Load Results File (A)** and select the \`circadian_per_point.csv\` file.
-3. The application will automatically parse the data and activate the spectral analysis dashboards:
-        - **Circadian Health Metrics Dashboard:** This dashboard will appear, showing space-averaged values for **Circadian Stimulus (CS)**, **Equivalent Melanopic Lux (EML)**, **CCT**, and a checklist for **WELL v2 L03 compliance**.
-- **3D View Metric Selector:** A new dropdown will appear in the Analysis panel, allowing you to switch the 3D heatmap visualization between different metrics like **Photopic Illuminance, EML, CS, and CCT**. This allows you to see the spatial distribution of these non-visual quantities.
-
-# Guide to the "EN 17037 Compliance" Recipe
-
-It automates the complex series of simulations required to check a design against the four main pillars of the European daylighting standard EN 17037: **Daylight Provision, Exposure to Sunlight, View Out, and Protection from Glare**.
-## 1. Foundational Scene Setup (Prerequisites)
-
-This recipe combines annual simulations, point-in-time checks, and image-based analysis. Therefore, it requires a complete and accurate scene setup.
-
-### Step 1: Model the Physical Space
-The geometry and materials are critical for all four compliance checks.
-- **Dimensions & Geometry (Toolbar Icon 2):** Define the room's **Width, Length, Height,** and **Orientation**.
-- **Apertures & Shading (Toolbar Icon 3):** Accurately model all windows and any static shading devices. The size and placement of glazing are fundamental to all four pillars of the standard.
-- **Material Properties (Toolbar Icon 5):** Set realistic **Reflectance** values for all interior surfaces to ensure accurate calculation of internally reflected light.
-### Step 2: Provide Climate Data (Critical)
-All checks in EN 17037 are climate-based.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. Click **"Upload EPW File"** and load a valid weather file for your project's location. This file is mandatory and will be used for every part of the simulation.
-### Step 3: Define All Analysis Points (Critical)
-This recipe requires three distinct types of analysis points to be defined.
-- **A. Illuminance Grid (for Daylight Provision):**
-    1. Go to the **Sensor Grid** panel (Toolbar Icon 6).
-2. Enable the **"Illuminance Grid"** and check the **"Floor"** surface.
-3. Set the **Height Offset** to the reference plane height (e.g., 0.85m as per the standard).
-- **B. Glare View Grid (for Glare Protection):**
-    1. In the **Sensor Grid** panel, also enable the **"View Grid"** checkbox.
-2. Set its **Height Offset** to a typical seated eye-level (e.g., 1.2m). This creates the observer points for the imageless glare analysis.
-- **C. Observer Viewpoint (for Sunlight & View):**
-    1. Go to the **Viewpoint** panel (Toolbar Icon 7).
-2. Position the camera at a representative location where an occupant would be. This viewpoint is used for the "Exposure to Sunlight" and "View Out" checks. 3. Set the **Y (Height)** to eye-level (e.g., 1.2m).
-
-## 2. Recipe-Specific Parameters
-
-With the scene fully defined, you can configure the compliance checks.
-### Step 4: Configure the EN 17037 Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: EN 17037 Compliance Check"**.
-3. The panel allows you to enable or disable each of the four checks and set their target performance levels.
-- **1. Daylight Provision:**
-        - **Toggle:** Keep this **checked** to run the annual daylighting simulation.
-- **Target Performance Level:** Select **Minimum, Medium,** or **High**. This sets the target illuminance levels (ET and ETM) that the script will check against, based on the standard's requirements. The script uses Climate-Based Method 2.
-    - **2. Exposure to Sunlight:**
-        - **Toggle:** Keep this **checked** to verify direct sun access.
-- **Reference Day:** Select a date for the check. The standard often suggests a day near the spring equinox, like **March 21st**.
-- **Target Duration:** Select **Minimum (1.5 hours), Medium (3.0 hours),** or **High (4.0 hours)**. The script will check if the viewpoint receives at least this much direct sunlight on the chosen day.
-    - **3. View Out:**
-        - **Toggle:** Keep this **checked** to generate a fisheye image for manual verification of view quality (e.g., horizontal sight angle, number of view layers).
-- **Quantitative View Factor Toggle:** Check this box to run an additional calculation that numerically determines the percentage of the occupant's view that is comprised of windows. This provides a quantitative metric to support the qualitative assessment.
-- **Target Performance Level:** Select the target level for the view.
-    - **4. Protection from Glare:**
-        - **Toggle:** Keep this **checked** to run the imageless annual glare analysis.
-- **Target Performance Level:** Select **Minimum (DGP ≤ 0.45), Medium (DGP ≤ 0.40),** or **High (DGP ≤ 0.35)**. The script will check if glare exceeds this threshold for more than 5% of occupied hours.
-- You can also provide an optional **occupancy schedule file** for more accurate results.
-## 3. Generating and Running the Simulation
-
-This is a multi-stage process automated by the generated scripts.
-### Step 5: Generate and Run
-1. Click the **Generate Package** button. The application generates a master script (\`RUN_..._EN17037_Compliance.sh\`) along with several helper Python scripts (\`process_en17037_daylight.py\`, \`process_en17037_glare.py\`). Crucially, it also generates the complete scripts for its dependency recipes: "Annual Daylight (3-Phase)" and "Imageless Annual Glare".
-2. Click the **Run Simulation** button. The master script will execute the checks in order. The **Simulation Console will show detailed progress for each step.** This process can be very time-consuming, especially the matrix generation for the annual simulations.
-- **Daylight Provision** runs the full 3-Phase annual simulation and then uses a Python script to analyze the \`.ill\` file against the EN 17037 criteria.
-- **Sunlight Exposure** runs a loop that checks the sun's visibility from the viewpoint at 15-minute intervals for the specified day.
-- **View Out** runs \`rpict\` to create a fisheye image. If the quantitative check is enabled, it runs a separate \`rtrace\` simulation on a modified scene to calculate the view factor.
-- **Glare Protection** runs the full imageless annual glare workflow and then uses a Python script to check the results against the standard's time-based threshold.
-## 4. Understanding the Output
-
-The final output is a comprehensive report printed directly to the **Simulation Console**.
-- **Console Report:** After all simulations are complete, the master script will print a summary for each enabled check, clearly stating the calculated value and whether it **PASSES** or **FAILS** based on the selected performance level.
-- **Supporting Files:** All intermediate and final data files are saved in your project folder for further inspection:
-    - **Daylight Provision:** An annual illuminance file (\`.ill\`) in \`08_results\`.
-- **Sunlight Exposure:** No file is saved; the result is printed to the console.
-- **View Out:** A fisheye image (\`_view_out.hdr\`) is saved in \`09_images\`. If the quantitative check was run, a \`_view_factor.txt\` file is saved in \`08_results\`.
-- **Glare Protection:** An annual DGP file (\`.dgp\`) is saved in \`08_results\`.
-
-# Guide to the "EN 12464-1 Illuminance" Recipe
-
-This recipe is specifically designed to verify compliance with the core lighting requirements of the European standard EN 12464-1 for indoor workplaces. It calculates the **maintained illuminance (Ēm)** and **uniformity (U₀)** for both a defined **Task Area** and its **Immediate Surrounding Area**. This analysis is typically performed for electric lighting scenarios.
-
-## 1. Foundational Scene Setup (Prerequisites)
-
-To perform a correct EN 12464-1 analysis, you must precisely define the lighting system and the specific areas of measurement.
-### Step 1: Model the Physical Space
-Define the room's geometry and surface properties.
-- **Dimensions & Geometry (Toolbar Icon 2):** Set the room's **Width, Length,** and **Height**.
-- **Material Properties (Toolbar Icon 5):** Set realistic **Reflectance** values for the walls, floor, and ceiling, as these will affect the distribution of light from your luminaires.
-### Step 2: Define the Artificial Lighting System (Critical)
-This recipe is centered on analyzing an electric lighting design.
-1. Open the **Artificial Lighting** panel (Toolbar Icon 4).
-2. Enable the **"Enable Artificial Lighting"** toggle.
-3. Define your luminaires. For compliance checks, it's highly recommended to use the **IES Photometric File** type and upload the \`.ies\` file from your luminaire manufacturer. This provides the most accurate light distribution data.
-4. Use the **Placement** controls to arrange your luminaires, either individually or in a grid.
-5. In the **"EN 12464-1 Specification"** section, set the correct **Maintenance Factor (MF)** for your design. The simulation results will be scaled by this factor to calculate the *maintained* illuminance.
-### Step 3: Define the Analysis Grids (CRITICAL)
-This is the most important prerequisite. EN 12464-1 requires you to analyze two distinct areas: the **task area** where the main visual work is done, and a 0.5m band around it called the **surrounding area**.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Ensure the **"Illuminance Grid"** is enabled.
-3. Under **"Floor Grid"**, set the **Height Offset** to the height of the workplane (e.g., 0.85m).
-4. Enable the **"Define Specific Task Area"** toggle.
-5. Use the sliders or the interactive **Task Area Visualizer** canvas to define the exact **Start X, Start Z, Width, and Depth** of your primary work area. The 3D view will show a colored overlay representing this zone.
-6. Enable the **"Include Surrounding Area"** toggle. The **Band Width** is typically fixed at 0.5m as per the standard. The application will automatically create a second grid in this band around your defined task area.
-7. When the simulation package is generated, this setup creates two separate sensor point files: \`task_grid.pts\` and \`surrounding_grid.pts\`.
-## 2. Recipe-Specific Parameters
-
-Once the scene is fully configured, set up the recipe itself.
-### Step 4: Configure the Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: EN 12464-1 Illuminance"**.
-3. Configure the main parameter:
-    - **Calculation Quality:** This sets the accuracy of the Radiance calculation. For official compliance verification, it's strongly recommended to select **"Compliance (High Quality)"**. This uses a high number of ambient bounces and divisions (\`-ab 7\`, \`-ad 2048\`) to ensure accurate results, especially for uniformity calculations.
-## 3. Generating and Running the Simulation
-
-### Step 5: Generate and Run
-1. Click the **Generate Package** button. This creates all necessary scene files and the master script (\`RUN_..._EN12464_Illuminance.sh\` or \`.bat\`).
-2. Click the **Run Simulation** button. The simulation console will appear. The script performs the following steps:
-    - \`oconv\`: Compiles an octree of the scene, including only the electric lighting geometry (no sky).
-- \`rtrace\` (Pass 1): Calculates the illuminance at every point in the \`task_grid.pts\` file and saves the results.
-- \`rtrace\` (Pass 2): Calculates the illuminance at every point in the \`surrounding_grid.pts\` file and saves the results.
-- **Post-Processing:** The script uses Radiance's \`total\` and \`datamax\` tools to calculate the average (Ēm), minimum (Emin), and uniformity (U₀) for both result sets.
-## 4. Understanding the Output
-
-The primary output is a text-based summary report automatically generated by the script.
-- **File Location:** The summary is saved as \`EN12464_Illuminance_Summary.txt\` inside your project's \`08_results\` folder.
-- **Content:** The summary report is also printed directly to the **Simulation Console** for immediate review. It clearly lists the calculated **Average Illuminance (Em)**, **Minimum Illuminance (Emin)**, and **Uniformity (U0)** for both the Task Area and the Surrounding Area, allowing you to easily compare them against the standard's requirements for your specific task.
-- **Visualization:** You can also load the intermediate results files (\`task_results_lux.txt\` and \`surround_results_lux.txt\`) into the **Analysis** panel to visualize the illuminance distribution as a false-color heatmap on the grids in the 3D view.
-
-# Guide to the "Unified Glare Rating (UGR)" Recipe
-
-This recipe automates the calculation of the **Unified Glare Rating (UGR)**, a metric used to predict discomfort glare from luminaires in an indoor environment, as specified by the European standard EN 12464-1. The calculation is performed from a single, specific observer viewpoint.
-## 1. Foundational Scene Setup (Prerequisites)
-
-An accurate UGR calculation depends on a precise definition of the lighting system, surface properties, and the observer's position.
-### Step 1: Model the Physical Space
-The brightness of surfaces in the field of view contributes to the overall glare calculation.
-- **Dimensions & Geometry (Toolbar Icon 2):** Define the room's **Width, Length,** and **Height**.
-- **Material Properties (Toolbar Icon 5):** Set realistic **Reflectance** values for all major surfaces (walls, floor, ceiling). These values are critical as they determine the background luminance (Lb) in the UGR formula.
-### Step 2: Define the Artificial Lighting System (Critical)
-UGR is a metric for assessing glare from electric lighting.
-1. Open the **Artificial Lighting** panel (Toolbar Icon 4).
-2. Enable the **"Enable Artificial Lighting"** toggle.
-3. Define your luminaires. For compliance checks, it is **essential to use the IES Photometric File** type and upload the \`.ies\` file provided by the luminaire manufacturer. This ensures the simulation uses the correct luminous intensity distribution of the light sources.
-4. Use the **Placement** controls to arrange your luminaires accurately within the scene.
-### Step 3: Define the Observer's Viewpoint (CRITICAL)
-The entire UGR calculation is performed from the perspective of a single observer. This step must be done correctly for a valid result.
-1. Open the **Viewpoint** panel (Toolbar Icon 7).
-2. **Set the View Type to Fisheye:** This is **mandatory**. In the "View Type" dropdown, you **must** select **Fisheye (h)**. The \`evalglare\` program, which calculates UGR, requires a 180° hemispherical image to correctly analyze the entire field of view.
-3. **Position the Observer:** Place the virtual camera at a representative observer location. Use the **"Enter Viewpoint" (FPV)** mode or the position sliders to place the camera at a typical eye height (e.g., **1.2 meters** for a seated person, 1.6m for standing). Position the observer in a location where glare is likely to be a concern (e.g., looking across the length of the room).
-4. **Set the Gaze Direction:** Aim the camera horizontally, parallel to the main viewing direction (e.g., along the length of the room).
-## 2. Recipe-Specific Parameters
-
-With the scene fully configured, you can set up the UGR recipe itself.
-### Step 4: Configure the Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: EN 12464-1 UGR"**.
-3. Configure the recipe's parameters:
-    - **UGR Limit (UGRₗ):** Enter the maximum permissible UGR value for the task being performed in the space (e.g., 19 for office work, 22 for general circulation). The script will use this value to determine if the result is a PASS or FAIL.
-- **Calculation Quality:** For official compliance verification, it is **strongly recommended to select "Compliance (High Quality)"**. Glare calculations are very sensitive to rendering accuracy. This preset uses a high number of ambient bounces and divisions (\`-ab 7\`, \`-ad 2048\`) to ensure all light sources and their reflections are captured accurately.
-## 3. Generating and Running the Simulation
-
-### Step 5: Generate and Run
-1. Click the **Generate Package** button. This creates all necessary scene files and the master script (\`RUN_..._EN12464_UGR.sh\` or \`.bat\`).
-2. Click the **Run Simulation** button. The simulation console will appear, showing the live progress.
-3. The script performs the following key steps:
-    - \`oconv\`: Compiles an octree of the scene, including only the electric lighting geometry (no sky is included for a standard UGR test).
-- \`rpict\`: Renders a high-quality, high-resolution (2048x2048) 180° fisheye HDR image from the observer's viewpoint.
-- \`evalglare\`: Analyzes the generated HDR image to find all luminaires in the field of view, calculate the background luminance, and compute the final UGR value according to the CIE formula. The script uses the \`-vth\` flag, which is specifically for UGR calculations from a fisheye image.
-## 4. Understanding the Output
-
-The recipe produces a detailed text report summarizing the UGR calculation.
-- **File Location:** A full report is saved as \`EN12464_UGR_Report.txt\` and a concise summary is saved as \`EN12464_UGR_Summary.txt\` inside your project's \`08_results\` folder.
-- **Console Output:** The most important information—the calculated **UGR Value** and the **PASS/FAIL** status based on your specified limit—is printed directly to the **Simulation Console** for immediate review.
-- **Visualization:** The intermediate fisheye HDR image (\`_ugr_view.hdr\`) is saved in the \`09_images/hdr\` folder. You can load this file in the **Analysis** panel and view it in the **HDR Image Viewer** to visually inspect the scene and identify which luminaires are contributing most to the glare sensation.
-
-# Guide to the "Lighting Energy Analysis" Recipe
-
-This advanced recipe simulates the annual energy consumption of an electric lighting system that is integrated with daylighting controls. It runs a full annual simulation, determines when blinds would be deployed, calculates the resulting interior illuminance, and then computes the energy used by the dimmable lighting system to meet a target illuminance setpoint.
-## 1. Foundational Scene Setup (Prerequisites)
-
-This recipe builds upon the annual daylighting workflow and has several critical dependencies that must be configured correctly.
-### Step 1: Model the Physical Space
-The room geometry and materials must be defined as they form the basis for the simulation matrices.
-- **Dimensions & Geometry (Toolbar Icon 2):** Set the room's **Width, Length, Height,** and **Orientation**.
-- **Material Properties (Toolbar Icon 5):** Set realistic **Reflectance** values for all interior surfaces.
-### Step 2: Define the Artificial Lighting & Daylighting Controls (Critical)
-The core of this analysis is the electric lighting system.
-1. Open the **Artificial Lighting** panel (Toolbar Icon 4).
-2. Enable **"Enable Artificial Lighting"**.
-3. Define your luminaires using **IES Photometric Files** for accuracy.
-4. Set the **Placement** (Individual or Grid) for your luminaires.
-5. Under **"Power & Energy"**, enter the **Luminaire Power (Watts)** for a single luminaire. The script uses this to calculate the total installed power.
-6. Enable **"Enable Daylighting Controls"**.
-7. Under **"Control Logic"**, configure your system:
-    - **Lighting Control Type:** Choose how the lights dim (e.g., **Continuous, Stepped**).
-- **Illuminance Setpoint (lux):** Set the target illuminance the system will try to maintain (e.g., 500 lux).
-- **Min Input Power / Min Light Output:** Define the dimming curve.
-8. Under **"Control Sensor Placement"**, define the location and view direction of the photosensor(s) that control the lights.
-### Step 3: Define the Analysis Grid
-The simulation needs a sensor grid to calculate illuminance values, which are used to determine when blinds are deployed.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Enable the **"Illuminance Grid"** and select the **"Floor"**.
-3. Set the grid **Spacing** and **Height Offset** for the workplane.
-### Step 4: Provide Climate & Glazing Data (CRITICAL)
-This recipe requires a weather file and **two separate BSDF files** to simulate the window system with and without blinds.
-- **Weather File:** In the **Project Setup** panel, **"Upload EPW File"**. This is used to generate the annual sky conditions.
-- **BSDF Files:** In the recipe panel itself, you must upload two \`.xml\` files:
-    - **BSDF - Blinds Open:** Represents the clear glazing.
-- **BSDF - Blinds Closed:** Represents the glazing with the blinds/shades deployed.
-- **Where to get them:** These files are typically generated using software like **LBNL WINDOW**, where you can model a complete fenestration assembly (e.g., double glazing + interior roller shade) and export its BSDF data.
-## 2. Recipe-Specific Parameters
-
-### Step 5: Configure the Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Lighting Energy Analysis"**.
-3. Configure the **"Blind Operation Parameters"**: These settings determine when the simulation deploys the "Blinds Closed" BSDF file.
-- **Illuminance Threshold (lux):** The direct sunlight illuminance value that will trigger the blinds to close. A common value is 1000 lux.
-    - **Area Trigger (%):** The percentage of the sensor grid that must exceed the threshold before the blinds are closed. A common value is 2%.
-
-## 3. Generating and Running the Simulation
-
-This is a multi-step workflow that requires running several scripts in sequence. The recipe automates this by calling its dependencies.
-
-### Step 6: Generate and Run
-1. Click the **Generate Package** button. This action generates multiple files:
-    - The complete script for the **"Annual Daylight (3-Phase)"** recipe (to generate the core \`view.mtx\` and \`daylight.mtx\`).
-- A Python helper script (\`process_energy.py\`) to manage the logic.
-    - The master orchestration script (\`RUN_..._Energy_Analysis.sh\`).
-2. Click the **Run Simulation** button. The console will show the progress as the master script executes the entire workflow:
-    - **Run Matrix Generation:** First, it calls the 3-Phase matrix generation script to create \`view.mtx\` and \`daylight.mtx\`.
-- **Calculate Direct Illuminance:** It runs \`dctimestep\` with a **direct-sun-only** sky matrix to get the illuminance used for the blind trigger.
-- **Generate Blind Schedule:** It runs the \`process_energy.py\` script, which analyzes the direct illuminance and creates a \`blinds.schedule\` file (an 8,760-hour list of 0s and 1s).
-- **Calculate Full Illuminance:** It runs \`dctimestep\` twice: once with the "Blinds Open" BSDF and once with the "Blinds Closed" BSDF.
-- **Combine Results:** It runs the Python script again to merge the "Open" and "Closed" results into a single final illuminance file (\`_energy_final.ill\`) based on the hourly schedule.
-- **Calculate Energy:** Finally, the Python script reads the final illuminance file, compares the hourly average daylight to the setpoint, calculates the required electrical light contribution, and computes the annual energy consumption.
-## 4. Understanding the Output
-
-The final output is a concise summary of the energy performance.
-- **File Location:** A summary file named \`energy_summary.csv\` is saved in the \`08_results\` folder.
-- **Console Output:** The key results are printed directly to the **Simulation Console** for immediate review.
-- **Dashboard:** The results can be visualized by loading the \`energy_summary.csv\` file in the **Analysis** panel, which will bring up the **Lighting Energy Dashboard**. This dashboard displays:
-    - **Lighting Power Density (LPD):** The installed power per unit area.
-- **Annual Lighting Energy:** The total estimated energy consumption in kWh/year.
-- **Daylighting Savings (%):** The percentage of energy saved compared to a scenario with no daylighting controls.
-
-# Guide to the "Façade Irradiation Analysis" Recipe
-
-This recipe is used to calculate the total amount of solar energy (irradiation, measured in kWh/m²/year) that strikes an exterior building façade over an entire year. It accounts for shading from the building's own geometry, attached shading devices, and any modeled surrounding context buildings.
-## 1. Foundational Scene Setup (Prerequisites)
-
-The accuracy of this analysis is highly dependent on the correct modeling of the building and its surrounding environment.
-### Step 1: Model the Physical Space and Context
-You must define the building's geometry and any objects that could cast a shadow on the façade being analyzed.
-- **Dimensions & Geometry (Toolbar Icon 2):** Set the building's core **Width, Length, Height,** and **Orientation**.
-- **Apertures & Shading (Toolbar Icon 3):** Accurately model any shading devices like **overhangs or fins** attached to the building, as these will directly block solar radiation.
-- **Scene Elements (Toolbar Icon 8):** This is **critical** for an accurate site-specific analysis. Use the **Context & Site Modeling** tools to add surrounding buildings or topography. These objects will be included in the simulation and will cast realistic shadows on your target façade.
-### Step 2: Establish Geographic Location (Critical)
-The amount of solar radiation is entirely dependent on the climate and sun path at the project's location.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. You **must** upload a climate data file by clicking **"Upload EPW File"**. The script uses this file with the \`gendaymtx\` command to generate the sky conditions for every hour of the year.
-## 2. Recipe-Specific Parameters
-
-Once the scene is modeled, you configure the specific parameters for the irradiation analysis.
-### Step 3: Configure the Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Façade Irradiation Analysis"**.
-3. The panel will display the following settings for defining the virtual analysis plane:
-    - **Target Façade:** Select which building face you want to analyze (**South, North, East,** or **West**). The script will automatically create a sensor grid parallel to this façade.
-- **Offset from Façade (m):** This sets the distance between the building face and the virtual analysis grid. A small value like **0.05** is typical.
-    - **Grid Spacing (m):** This controls the resolution of the analysis. A smaller value (e.g., **0.5m**) creates a more detailed map but takes longer to compute.
-## 3. Generating and Running the Simulation
-
-### Step 4: Generate and Run
-1. Click the **Generate Package** button. This action compiles your scene and settings and generates several key files, including:
-    - The scene geometry (\`.rad\`) and material (\`.rad\`) files.
-- A special sensor points file (\`facade_grid.pts\`) containing the coordinates and normal vectors for each point on the virtual façade plane.
-- The master simulation script (\`RUN_..._Facade_Irradiation.sh\`).
-2. Click the **Run Simulation** button. The console will show the progress as the script executes a multi-step Radiance workflow:
-    - \`gendaymtx\`: Creates an annual sky matrix from your EPW file.
-- \`oconv\`: Compiles an octree of your entire scene, including the main building, shading devices, and all context geometry.
-- \`rcontrib\`: Calculates the Daylight Coefficients. This is an intensive step that traces rays from each sensor point on the façade grid out to the sky, determining how much of the sky each point can see while accounting for all obstructions.
-- \`dctimestep\`: Multiplies the daylight coefficients by the hourly sky matrix to calculate the hourly solar irradiance (in W/m²) for the entire year.
-- \`total\` & \`rcalc\`: These commands sum the hourly irradiance values for the whole year and convert the final result from W/m²/year to the standard unit of **kWh/m²/year**.
-## 4. Understanding the Output
-
-The final output is a text file containing the total annual solar irradiation value for each sensor point.
-- **File Location:** The results are saved as \`facade_annual_kWh.txt\` in your project's \`08_results\` folder.
-- **Visualization:**
-    1. Open the **Analysis** panel.
-2. Click **Load Results File (A)** and select the generated \`facade_annual_kWh.txt\` file.
-3. The application will automatically create a temporary 3D plane in your scene that matches the position of your analysis grid. 4. It will then display a false-color heatmap on this plane, allowing you to visually identify areas of high and low solar exposure on the façade throughout the year.
-
-# Guide to the "Annual Solar Radiation" Recipe
-
-This recipe calculates the cumulative solar energy (irradiation, measured in kWh/m²/year) that falls on interior surfaces over an entire year. It is essential for understanding passive solar heating gains, potential for material degradation from UV exposure, and identifying areas with high solar load.
-## 1. Foundational Scene Setup (Prerequisites)
-
-The accuracy of this analysis depends on the correct modeling of the building's interaction with the annual sun path.
-### Step 1: Model the Physical Space
-You must define the building's geometry and any elements that will cast shadows.
-- **Dimensions & Geometry (Toolbar Icon 2):** Set the room's **Width, Length, Height,** and **Orientation**.
-- **Apertures & Shading (Toolbar Icon 3):** Accurately model all windows and any external or internal shading devices. These elements are critical as they control how much solar radiation enters the space.
-- **Scene Elements (Toolbar Icon 8):** For a site-specific analysis, model any surrounding context buildings or topography, as they will cast shadows on your building's façade throughout the year.
-### Step 2: Establish Geographic Location (Critical)
-The amount and angle of solar radiation are entirely dependent on the project's location.
-1. Open the **Project Setup** panel (Toolbar Icon 1).
-2. You **must** upload a climate data file by clicking **"Upload EPW File"**. The simulation script uses this file to generate the sky conditions for all 8,760 hours of the year.
-### Step 3: Define the Analysis Grids (CRITICAL)
-This is the most important prerequisite. You must specify which interior surfaces you want to measure.
-1. Open the **Sensor Grid** panel (Toolbar Icon 6).
-2. Ensure the **"Illuminance Grid"** toggle is enabled.
-3. Under **Surface Selection**, check the boxes for all the interior surfaces you want to analyze (e.g., **"Floor"**, **"North Wall"**, etc.).
-4. For each selected surface, define the **Spacing** of the sensor points. A denser grid provides a higher-resolution map.
-5. This setup is used to generate the \`grid.pts\` file, which contains the coordinates and normal vectors for every point where the calculation will be performed.
-## 2. Recipe-Specific Parameters
-
-With the scene fully defined, you can configure the recipe itself.
-### Step 4: Configure the Recipe
-1. Open the **Simulation** panel (Toolbar toggle-modules-btn).
-2. From the **"Select Recipe"** dropdown, choose **"Recipe: Annual Solar Radiation"**.
-3. The panel will display the following settings:
-    - **Calculation Quality:** This sets the accuracy of the Radiance ambient calculation. It is recommended to use **"Medium (Balanced)"** or **"High (Accurate)"** to ensure reliable results.
-- **Weather File (.epw):** This input confirms which EPW file is being used. The file must be loaded via the **Project Setup** panel.
-## 3. Generating and Running the Simulation
-
-### Step 5: Generate and Run
-1. Click the **Generate Package** button. This action compiles all scene data and recipe settings into a complete Radiance project, including the master simulation script (\`RUN_..._Annual_Radiation.sh\`).
-2. Click the **Run Simulation** button. The simulation console will appear, showing the progress of a complex, multi-step workflow automated by the script:
-    - \`gendaymtx\`: Creates the annual sky matrix from your EPW file.
-- \`oconv\`: Compiles an octree of your entire scene, including all shading and context geometry.
-- \`rcontrib\`: Calculates the Daylight Coefficients. This is the most intensive step, where Radiance traces rays from every sensor point on your interior grids out to the sky to determine how much of the sky is visible from each point, accounting for all obstructions.
-- \`dctimestep\`: Multiplies the daylight coefficients by the hourly sky matrix to calculate the hourly solar irradiance (in W/m²) for the entire year.
-- \`rmtxop\` & \`total\`: The script uses these tools to sum the hourly results for each point and convert the final value into the standard unit of **kWh/m²/year**.
-## 4. Viewing and Analyzing the Output
-
-The final output is a text file containing the total annual solar radiation value for each sensor point on your grids.
-- **File Location:** The results are saved as \`..._annual_radiation.txt\` in your project's \`08_results\` folder.
-- **Visualization:**
-    1. Open the **Analysis** panel.
-2. Click **Load Results File (A)** and select the generated \`_annual_radiation.txt\` file.
-3. The application will display a false-color heatmap on the sensor grids you defined in the 3D view. 4. This allows you to visually identify which surfaces and which parts of those surfaces receive the most and least solar energy over the course of a year.
-    `;
-
-    const recipeGuides = {};
-    const guideSelector = dom['guide-selector'];
-    const guideContentDiv = dom['guide-content'];
-    if (!guideSelector || !guideContentDiv) return;
-
-    // Split guides by the main title pattern
-    const guides = guideText.split(/# Guide to the "([^"]+)" Recipe/g).slice(1);
-
-    for (let i = 0; i < guides.length; i += 2) {
-        const recipeName = guides[i].trim();
-        let rawContent = guides[i + 1];
-
-        // 1. Clean content
-        rawContent = rawContent.replace(/\//g, '').trim();
-
-        // 3. Process content line-by-line to build the main HTML content
-        let html = '';
-        let inList = null; // null, 'ul', 'ol', 'table'
-        let tableHeader = true;
-
-        const closeList = () => {
-            if (inList) {
-                html += `</${inList}>`;
-                inList = null;
-                tableHeader = true;
-            }
-        };
-
-        const lines = rawContent.split('\n');
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-
-            if (trimmedLine.length === 0) {
-                closeList();
-                continue;
-            }
-
-            // Inline formatting helper
-            const formatInline = (text) => text
-                .replace(/\`([^`]+)\`/g, '<code>$1</code>')
-                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-            // Headings
-            if (trimmedLine.startsWith('## ')) {
-                closeList();
-                html += `<h2>${formatInline(trimmedLine.substring(3))}</h2>`;
-            } else if (trimmedLine.startsWith('### ')) {
-                closeList();
-                html += `<h3>${formatInline(trimmedLine.substring(4))}</h3>`;
-            } else if (trimmedLine.startsWith('#### ')) {
-                closeList();
-                html += `<h4>${formatInline(trimmedLine.substring(5))}</h4>`;
-            }
-            // Tables
-            else if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
-                if (inList !== 'table') {
-                    closeList();
-                    html += '<table>';
-                    inList = 'table';
-                    tableHeader = true;
-                }
-                const cells = trimmedLine.split('|').slice(1, -1);
-                if (cells.every(c => c.trim().match(/^-+$/))) {
-                    tableHeader = false; // This is the separator line
-                } else {
-                    const tag = tableHeader ? 'th' : 'td';
-                    html += '<tr>' + cells.map(c => `<${tag}>${formatInline(c.trim())}</${tag}>`).join('') + '</tr>';
-                }
-            }
-            // Lists
-            else if (trimmedLine.match(/^\d+\.\s/)) {
-                if (inList !== 'ol') { closeList(); html += '<ol>'; inList = 'ol'; }
-                html += `<li>${formatInline(trimmedLine.replace(/^\d+\.\s/, ''))}</li>`;
-            } else if (trimmedLine.startsWith('- ')) {
-                if (inList !== 'ul') { closeList(); html += '<ul>'; inList = 'ul'; }
-                html += `<li>${formatInline(trimmedLine.substring(2))}</li>`;
-            }
-            // Paragraphs
-            else {
-                closeList();
-                html += `<p>${formatInline(trimmedLine)}</p>`;
-            }
-        }
-        closeList(); // Close any trailing list
-
-        recipeGuides[recipeName] = html;
-
-        const option = document.createElement('option');
-        option.value = recipeName;
-        option.textContent = recipeName;
-        guideSelector.appendChild(option);
-    }
-
-    guideSelector.addEventListener('change', e => {
-        guideContentDiv.innerHTML = recipeGuides[e.target.value] || '<p class="text-[--text-secondary]">Please select a recipe from the dropdown above to see its guide.</p>';
-    });
-}

@@ -1,28 +1,10 @@
 // scripts/project.js
 
 import * as THREE from 'three';
-import { generateRadFileContent, generateViewpointFileContent, transformThreePointToRadianceArray, transformThreeVectorToRadianceArray, generateViewpointFileContentFromState, generateRayFileContent } from './radiance.js';
 import { updateScene } from './geometry.js';
 import { recreateSimulationPanels } from './simulation.js';
-import { lightingManager } from './lighting.js';
-import { generateScripts } from './scriptGenerator.js';
 import { getRecipeById } from './recipes/RecipeRegistry.js';
 import { getActiveRecipeSelection, buildRecipeConfig } from './recipes/configMappers.js';
-import './recipes/illuminanceRecipe.js';
-import './recipes/renderingRecipe.js';
-import './recipes/daylightFactorRecipe.js';
-import './recipes/annual3PhaseRecipe.js';
-import './recipes/dgpRecipe.js';
-import './recipes/sdaAseRecipe.js';
-import './recipes/annual5PhaseRecipe.js';
-import './recipes/imagelessGlareRecipe.js';
-import './recipes/enIlluminanceRecipe.js';
-import './recipes/enUgrRecipe.js';
-import './recipes/en17037Recipe.js';
-import './recipes/lightingEnergyRecipe.js';
-import './recipes/facadeIrradiationRecipe.js';
-import './recipes/annualRadiationRecipe.js';
-import './recipes/spectralLarkRecipe.js';
 
 class Project {
     constructor() {
@@ -36,7 +18,7 @@ class Project {
     setEpwData(epwData) {
         this.epwFileContent = epwData;
     }
-    
+
     addSimulationFile(inputId, fileName, content) {
         if (!fileName || !content) {
             delete this.simulationFiles[inputId];
@@ -151,7 +133,7 @@ class Project {
     }
 
     async gatherAllProjectData() {
-    // Import UI module to get access to dom
+        // Import UI module to get access to dom
         const ui = await import('./ui.js');
         const dom = ui.getDom();
 
@@ -281,103 +263,101 @@ class Project {
             },
             materials: (() => {
                 const getMaterialData = (type) => {
-                        const mode = dom[`${type}-mode-srd`]?.classList.contains('active') ? 'srd' : 'refl';
-                        const data = {
-                            type: getValue(`${type}-mat-type`),
-                            mode: mode,
-                            reflectance: getValue(`${type}-refl`, parseFloat),
-                            specularity: getValue(`${type}-spec`, parseFloat),
-                            roughness: getValue(`${type}-rough`, parseFloat),
-                            srdFile: null
+                    const mode = dom[`${type}-mode-srd`]?.classList.contains('active') ? 'srd' : 'refl';
+                    const data = {
+                        type: getValue(`${type}-mat-type`),
+                        mode: mode,
+                        reflectance: getValue(`${type}-refl`, parseFloat),
+                        specularity: getValue(`${type}-spec`, parseFloat),
+                        roughness: getValue(`${type}-rough`, parseFloat),
+                        srdFile: null
+                    };
+                    if (mode === 'srd' && this.simulationFiles[`${type}-srd-file`]) {
+                        data.srdFile = {
+                            inputId: `${type}-srd-file`,
+                            name: this.simulationFiles[`${type}-srd-file`].name
                         };
-                        if (mode === 'srd' && this.simulationFiles[`${type}-srd-file`]) {
-                            data.srdFile = {
-                                inputId: `${type}-srd-file`,
-                                name: this.simulationFiles[`${type}-srd-file`].name
-                            };
-                        }
-                        return data;
-                    };
-
-                    return {
-                        wall: getMaterialData('wall'),
-                        floor: getMaterialData('floor'),
-                        ceiling: getMaterialData('ceiling'),
-                        frame: { type: getValue('frame-mat-type'), reflectance: getValue('frame-refl', parseFloat), specularity: getValue('frame-spec', parseFloat), roughness: getValue('frame-rough', parseFloat) },
-                        shading: { type: getValue('shading-mat-type'), reflectance: getValue('shading-refl', parseFloat), specularity: getValue('shading-spec', parseFloat), roughness: getValue('shading-rough', parseFloat) },
-                        furniture: { type: getValue('furniture-mat-type'), reflectance: getValue('furniture-refl', parseFloat), specularity: getValue('furniture-spec', parseFloat), roughness: getValue('furniture-rough', parseFloat) },
-                        glazing: {
-                            transmittance: getValue('glazing-trans', parseFloat),
-                            bsdfEnabled: getChecked('bsdf-toggle'),
-                            bsdfFile: getChecked('bsdf-toggle') && this.simulationFiles['bsdf-file'] ? { inputId: 'bsdf-file', name: this.simulationFiles['bsdf-file'].name } : null
-                        },
-                    };
-                })(),
-                lighting: lightingManager.getCurrentState(),
-                sensorGrids: ui.getSensorGridParams(),
-                viewpoint: {
-                    'view-type': getValue('view-type'), 'gizmo-toggle': getChecked('gizmo-toggle'),
-                    'view-pos-x': getValue('view-pos-x', parseFloat), 'view-pos-y': getValue('view-pos-y', parseFloat), 'view-pos-z': getValue('view-pos-z', parseFloat),
-                    'view-dir-x': getValue('view-dir-x', parseFloat), 'view-dir-y': getValue('view-dir-y', parseFloat), 'view-dir-z': getValue('view-dir-z', parseFloat),
-                    'view-fov': getValue('view-fov', parseFloat), 'view-dist': getValue('view-dist', parseFloat)
-                },
-                viewOptions: {
-                projection: dom['proj-btn-persp']?.classList.contains('active') ? 'perspective' : 'orthographic',
-                    transparent: getChecked('transparent-toggle'),
-                    ground: getChecked('ground-plane-toggle'),
-                    worldAxes: getChecked('world-axes-toggle'),
-                    worldAxesSize: getValue('world-axes-size', parseFloat),
-                    hSection: { enabled: getChecked('h-section-toggle'), dist: getValue('h-section-dist', parseFloat) },
-                    vSection: { enabled: getChecked('v-section-toggle'), dist: getValue('v-section-dist', parseFloat) }
-                },
-                savedViews: getSavedViews().map(view => ({
-                    name: view.name,
-                    thumbnail: view.thumbnail, 
-                    cameraState: {
-                        position: view.cameraState.position.toArray(),
-                        quaternion: view.cameraState.quaternion.toArray(),
-                        zoom: view.cameraState.zoom,
-                        target: view.cameraState.target.toArray(),
-                        viewType: view.cameraState.viewType,
-                        fov: view.cameraState.fov
                     }
-                })),
-                topography: {
-                    enabled: getChecked('context-mode-topo'),
-                    heightmapFile: this.simulationFiles['topo-heightmap-file'] ? {
-                        inputId: 'topo-heightmap-file',
-                        name: this.simulationFiles['topo-heightmap-file'].name
-                    } : null,
-                    planeSize: getValue('topo-plane-size', parseFloat),
-                    verticalScale: getValue('topo-vertical-scale', parseFloat)
-                },
-                visualization: {
-                    compareMode: getChecked('compare-mode-toggle'),
-                    activeView: document.querySelector('#view-mode-selector .btn.active')?.id.replace('view-mode-', '').replace('-btn', '') || 'a',
-                    scaleMin: getValue('results-scale-min', parseFloat),
-                    scaleMax: getValue('results-scale-max', parseFloat),
-                    palette: getValue('results-palette'),
-                    activeMetric: getValue('metric-selector'),
-                },
-                occupancy: {
-                    enabled: getChecked('occupancy-toggle'),
-                    fileName: getValue('occupancy-schedule-filename'),
-                    timeStart: getValue('occupancy-time-range-start', parseFloat),
-                    timeEnd: getValue('occupancy-time-range-end', parseFloat),
-                    days: (() => {
-                        const days = {};
-                        const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-                        document.querySelectorAll('.occupancy-day').forEach((el, i) => {
-                            days[dayMap[i]] = el.checked;
-                        });
-                        return days;
-                    })()
-                },
-                epwFileContent: this.epwFileContent,
-                simulationFiles: this.simulationFiles,
-                simulationParameters: this.gatherSimulationParameters()
+                    return data;
+                };
+
+                return {
+                    wall: getMaterialData('wall'),
+                    floor: getMaterialData('floor'),
+                    ceiling: getMaterialData('ceiling'),
+                    frame: { type: getValue('frame-mat-type'), reflectance: getValue('frame-refl', parseFloat), specularity: getValue('frame-spec', parseFloat), roughness: getValue('frame-rough', parseFloat) },
+                    shading: { type: getValue('shading-mat-type'), reflectance: getValue('shading-refl', parseFloat), specularity: getValue('shading-spec', parseFloat), roughness: getValue('shading-rough', parseFloat) },
+                    furniture: { type: getValue('furniture-mat-type'), reflectance: getValue('furniture-refl', parseFloat), specularity: getValue('furniture-spec', parseFloat), roughness: getValue('furniture-rough', parseFloat) },
+                    glazing: {
+                        transmittance: getValue('glazing-trans', parseFloat),
+                        bsdfEnabled: getChecked('bsdf-toggle'),
+                        bsdfFile: getChecked('bsdf-toggle') && this.simulationFiles['bsdf-file'] ? { inputId: 'bsdf-file', name: this.simulationFiles['bsdf-file'].name } : null
+                    },
+                };
+            })(),
+            viewpoint: {
+                'view-type': getValue('view-type'), 'gizmo-toggle': getChecked('gizmo-toggle'),
+                'view-pos-x': getValue('view-pos-x', parseFloat), 'view-pos-y': getValue('view-pos-y', parseFloat), 'view-pos-z': getValue('view-pos-z', parseFloat),
+                'view-dir-x': getValue('view-dir-x', parseFloat), 'view-dir-y': getValue('view-dir-y', parseFloat), 'view-dir-z': getValue('view-dir-z', parseFloat),
+                'view-fov': getValue('view-fov', parseFloat), 'view-dist': getValue('view-dist', parseFloat)
+            },
+            viewOptions: {
+                projection: dom['proj-btn-persp']?.classList.contains('active') ? 'perspective' : 'orthographic',
+                transparent: getChecked('transparent-toggle'),
+                ground: getChecked('ground-plane-toggle'),
+                worldAxes: getChecked('world-axes-toggle'),
+                worldAxesSize: getValue('world-axes-size', parseFloat),
+                hSection: { enabled: getChecked('h-section-toggle'), dist: getValue('h-section-dist', parseFloat) },
+                vSection: { enabled: getChecked('v-section-toggle'), dist: getValue('v-section-dist', parseFloat) }
+            },
+            savedViews: getSavedViews().map(view => ({
+                name: view.name,
+                thumbnail: view.thumbnail,
+                cameraState: {
+                    position: view.cameraState.position.toArray(),
+                    quaternion: view.cameraState.quaternion.toArray(),
+                    zoom: view.cameraState.zoom,
+                    target: view.cameraState.target.toArray(),
+                    viewType: view.cameraState.viewType,
+                    fov: view.cameraState.fov
+                }
+            })),
+            topography: {
+                enabled: getChecked('context-mode-topo'),
+                heightmapFile: this.simulationFiles['topo-heightmap-file'] ? {
+                    inputId: 'topo-heightmap-file',
+                    name: this.simulationFiles['topo-heightmap-file'].name
+                } : null,
+                planeSize: getValue('topo-plane-size', parseFloat),
+                verticalScale: getValue('topo-vertical-scale', parseFloat)
+            },
+            visualization: {
+                compareMode: getChecked('compare-mode-toggle'),
+                activeView: document.querySelector('#view-mode-selector .btn.active')?.id.replace('view-mode-', '').replace('-btn', '') || 'a',
+                scaleMin: getValue('results-scale-min', parseFloat),
+                scaleMax: getValue('results-scale-max', parseFloat),
+                palette: getValue('results-palette'),
+                activeMetric: getValue('metric-selector'),
+            },
+            occupancy: {
+                enabled: getChecked('occupancy-toggle'),
+                fileName: getValue('occupancy-schedule-filename'),
+                timeStart: getValue('occupancy-time-range-start', parseFloat),
+                timeEnd: getValue('occupancy-time-range-end', parseFloat),
+                days: (() => {
+                    const days = {};
+                    const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                    document.querySelectorAll('.occupancy-day').forEach((el, i) => {
+                        days[dayMap[i]] = el.checked;
+                    });
+                    return days;
+                })()
+            },
+            epwFileContent: this.epwFileContent,
+            simulationFiles: this.simulationFiles,
+            simulationParameters: this.gatherSimulationParameters()
         };
-        
+
         // Await the promises from the async IIFEs to get the actual data
         projectData.geometry.furniture = await projectData.geometry.furniture;
         projectData.geometry.vegetation = await projectData.geometry.vegetation;
@@ -391,323 +371,67 @@ class Project {
         const dom = getDom();
 
         // --- Electron Environment ---
-		if (window.electronAPI) {
-			const path = await window.electronAPI.openDirectory();
-			if (path) {
-				this.dirPath = path;
-				this.dirHandle = null; // Clear the handle if we're using a path in Electron
-				dom['project-access-prompt']?.classList.add('hidden');
-				showAlert(`Project folder set to: ${path}`, 'Directory Set');
-				return true;
-			}
-			return false;
-		}
-
-		// --- Browser Environment Fallback (for testing in browser without Electron) ---
-		if (!window.showDirectoryPicker) {
-			showAlert("Your browser does not support the File System Access API. Please use a modern browser like Chrome or Edge.", "Feature Not Supported");
-			return false;
-		}
-		try {
-			const dirHandle = await window.showDirectoryPicker();
-			this.dirHandle = dirHandle;
-			this.dirPath = null; // Clear the path if we're using a handle
-			dom['project-access-prompt']?.classList.add('hidden');
-			showAlert('Project folder selected. Future saves will go here directly.', 'Directory Set');
-			return true;
-		} catch (error) {
-			if (error.name !== 'AbortError') console.error("Error selecting directory:", error);
-			return false;
-		}
-	}
-
-    async generateSimulationPackage(panelElement, uniqueId = null) {
-        const { showAlert } = await import('./ui.js');
-        const { generateRadFileContent, generateRayFileContent } = await import('./radiance.js');
-    
-        // 1. Check if a project directory is open
-        if (!this.dirHandle && !this.dirPath) {
-            showAlert('Please save or load a project directory first before generating scripts.', 'Project Directory Not Set');
-            return null;
-        }
-    
-        // 2. Gather data and generate script content
-        const projectData = await this.gatherAllProjectData();
-        const projectName = projectData.projectInfo['project-name']?.replace(/\s+/g, '_') || 'scene';
-        this.projectName = projectName;
-    
-        const simParams = projectData.simulationParameters || { global: {}, recipes: [] };
-        const globalParams = simParams.global || {};
-        const recipeOverrides = {};
-        const recipeContainer = panelElement.querySelector('#recipe-parameters-container');
-        const activeRecipePanel = recipeContainer ? recipeContainer.firstElementChild : null;
-
-        if (activeRecipePanel) {
-            const panelIdSuffix = activeRecipePanel.id.split('-').pop();
-            activeRecipePanel.querySelectorAll('input, select').forEach(input => {
-                const key = input.id.replace(`-${panelIdSuffix}`, '');
-                if (!key) return;
-
-                if (input.type === 'file') {
-                    if (this.simulationFiles[key]) {
-                        recipeOverrides[key] = {
-                            name: this.simulationFiles[key].name,
-                            content: this.simulationFiles[key].content
-                        };
-                    } else {
-                        recipeOverrides[key] = null;
-                    }
-                } else {
-                    recipeOverrides[key] =
-                        input.type === 'checkbox' || input.type === 'radio'
-                            ? input.checked
-                            : input.value;
-                }
-            });
-        }
-
-        // Keep legacy mergedSimParams for non-registry recipes.
-        projectData.mergedSimParams = { ...globalParams, ...recipeOverrides };
-
-        // Sync the active recipe overrides into simulationParameters so that
-        // configMappers + RecipeRegistry see the same values the user edits
-        // in the sidebar. This enforces "one package = one active recipe".
-        const recipeType = panelElement.dataset.templateId;
-        if (recipeType) {
-            const syncedSimParams = {
-                global: globalParams,
-                recipes: Array.isArray(simParams.recipes) ? [...simParams.recipes] : []
-            };
-
-            // Remove any existing entry for this recipeType
-            for (let i = syncedSimParams.recipes.length - 1; i >= 0; i--) {
-                if (syncedSimParams.recipes[i].templateId === recipeType) {
-                    syncedSimParams.recipes.splice(i, 1);
-                }
+        if (window.electronAPI) {
+            const path = await window.electronAPI.openDirectory();
+            if (path) {
+                this.dirPath = path;
+                this.dirHandle = null; // Clear the handle if we're using a path in Electron
+                dom['project-access-prompt']?.classList.add('hidden');
+                showAlert(`Project folder set to: ${path}`, 'Directory Set');
+                return true;
             }
-
-            // Add current active overrides as the canonical entry (single active recipe per run)
-            const activeEntry = {
-                templateId: recipeType,
-                values: recipeOverrides
-            };
-            syncedSimParams.recipes.push(activeEntry);
-
-            // Also expose canonical activeRecipe for configMappers / registry consumers
-            syncedSimParams.activeRecipe = activeEntry;
-
-            projectData.simulationParameters = syncedSimParams;
+            return false;
         }
 
-        // --- Add uniqueId to projectData for generateScripts ---
-        if (uniqueId) {
-            projectData.uniqueId = uniqueId;
+        // --- Browser Environment Fallback (for testing in browser without Electron) ---
+        if (!window.showDirectoryPicker) {
+            showAlert("Your browser does not support the File System Access API. Please use a modern browser like Chrome or Edge.", "Feature Not Supported");
+            return false;
         }
-        // --- End of addition ---
-
-        // Generate all necessary input files in memory first.
-        const { materials, geometry } = await generateRadFileContent(projectData);
-        const viewpointContent = generateViewpointFileContent(projectData.viewpoint, projectData.geometry.room);
-        const fisheyeVpData = { ...projectData.viewpoint, 'view-type': 'h' };
-        const fisheyeContent = generateViewpointFileContent(fisheyeVpData, projectData.geometry.room);
-        const allPtsContent = await this._generateSensorPointsContent('all');
-        const taskPtsContent = await this._generateSensorPointsContent('task');
-        const surroundingPtsContent = await this._generateSensorPointsContent('surrounding');
-        const rayContent = await generateRayFileContent();
-
-        // Determine active recipe definition (if any) from the registry.
-        const recipeDef = getRecipeById(recipeType);
-
-        let scriptsToGenerate;
-        if (recipeDef) {
-            // New path: use RecipeRegistry-based definition (non-breaking).
-            // Build config from current simulation parameters and active selection.
-            const simParamsForConfig = projectData.simulationParameters || { global: {}, recipes: [] };
-            const activeSelection = getActiveRecipeSelection(panelElement, simParamsForConfig);
-            const config = buildRecipeConfig(
-                recipeDef,
-                projectData,
-                simParamsForConfig,
-                this.simulationFiles,
-                activeSelection
-            );
-
-            const validation = recipeDef.validate(projectData, config);
-            if (validation.errors && validation.errors.length > 0) {
-                const { showAlert } = await import('./ui.js');
-                const errorHtml =
-                    '<p>The selected simulation recipe configuration is invalid:</p>' +
-                    '<ul class="list-disc pl-5 space-y-1">' +
-                    validation.errors.map(e => `<li>${e}</li>`).join('') +
-                    '</ul>';
-                showAlert(errorHtml, 'Cannot Generate Package: Invalid Configuration');
-                return null;
-            }
-            if (validation.warnings && validation.warnings.length > 0) {
-                console.warn('Simulation recipe warnings:', validation.warnings);
-            }
-
-            scriptsToGenerate = recipeDef.generateScripts(projectData, config);
-        } else {
-            // Fallback to legacy behavior for recipes not yet migrated.
-            scriptsToGenerate = generateScripts(projectData, recipeType);
-        }
-    
-        if (scriptsToGenerate.length === 0) {
-            showAlert('Could not generate any scripts for this recipe.', 'Generation Failed');
-            return null;
-        }
-    
-        // 3. Structure all files to be written
-        const filesToWrite = [
-            { path: ['01_geometry', `${projectName}.rad`], content: geometry },
-            { path: ['02_materials', `${projectName}_materials.rad`], content: materials },
-            { path: ['03_views', 'viewpoint.vf'], content: viewpointContent },
-            { path: ['03_views', 'viewpoint_fisheye.vf'], content: fisheyeContent },
-            { path: ['08_results', 'grid.pts'], content: allPtsContent },
-            { path: ['08_results', 'task_grid.pts'], content: taskPtsContent },
-            { path: ['08_results', 'surrounding_grid.pts'], content: surroundingPtsContent },
-            { path: ['08_results', 'view_grid.ray'], content: rayContent }
-        ].filter(f => f.content !== null && f.content !== undefined);
-
-        const makeExecutableContent = `#!/bin/bash\n# Makes all .sh scripts in this directory executable.\nchmod +x ./*.sh\necho "All scripts are now executable."`;
-        scriptsToGenerate.push({fileName: 'make_executable.sh', content: makeExecutableContent});
-
-        scriptsToGenerate.forEach(script => {
-            filesToWrite.push({ path: ['07_scripts', script.fileName], content: script.content });
-        });
-
-        // 4. Write all files using the appropriate method for the environment
         try {
-            if (window.electronAPI && this.dirPath) {
-                // Electron Method
-                await window.electronAPI.saveProject({ projectPath: this.dirPath, files: filesToWrite });
-            } else if (this.dirHandle) {
-                // Browser Method
-                 const writeFile = async (dirHandle, filename, content) => {
-                    if (content === null || content === undefined) return;
-                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(content);
-                    await writable.close();
-                };
-
-                for (const file of filesToWrite) {
-                    let currentHandle = this.dirHandle;
-                    for (let i = 0; i < file.path.length - 1; i++) {
-                        currentHandle = await currentHandle.getDirectoryHandle(file.path[i], { create: true });
-                    }
-                    await writeFile(currentHandle, file.path[file.path.length - 1], file.content);
-                }
-            } else {
-                throw new Error("No valid directory path or handle is available for saving.");
-            }
-    
-            showAlert(`Scripts and input files saved successfully to your project directory.`, 'Package Generated');
-    
-            // 5. Return the script details for the UI
-            const shScript = scriptsToGenerate.find(s => s.fileName.endsWith('.sh'));
-            const batScript = scriptsToGenerate.find(s => s.fileName.endsWith('.bat'));
-            const displayContent = shScript ? shScript.content : (batScript ? batScript.content : null);
-    
-            if (!displayContent) return null;
-    
-            return {
-                content: displayContent,
-                shFile: shScript ? shScript.fileName : null,
-                batFile: batScript ? batScript.fileName : null
-            };
-    
+            const dirHandle = await window.showDirectoryPicker();
+            this.dirHandle = dirHandle;
+            this.dirPath = null; // Clear the path if we're using a handle
+            dom['project-access-prompt']?.classList.add('hidden');
+            showAlert('Project folder selected. Future saves will go here directly.', 'Directory Set');
+            return true;
         } catch (error) {
-            console.error("Failed to write simulation package to project directory:", error);
-            showAlert(`Error saving package: ${error.message}`, 'File System Error');
-            return null;
+            if (error.name !== 'AbortError') console.error("Error selecting directory:", error);
+            return false;
         }
     }
 
+
+
     async downloadProjectFile() {
         const { showAlert } = await import('./ui.js');
-    
+
         // 1. Check for a valid save location (either an Electron path or a Browser handle).
         // If none exists, prompt the user to select one.
         if (!this.dirPath && !this.dirHandle) {
-             const gotLocation = await this.requestProjectDirectory();
-             // Abort the save if the user cancels the directory selection dialog.
-             if (!gotLocation) return;
+            const gotLocation = await this.requestProjectDirectory();
+            // Abort the save if the user cancels the directory selection dialog.
+            if (!gotLocation) return;
         }
-    
+
         try {
             const projectData = await this.gatherAllProjectData();
-        const projectName = this.projectName || 'project';
+            const projectName = this.projectName || 'project';
 
-            // Ensure the canonical activeRecipe is present for persisted settings
-            if (projectData.simulationParameters && projectData.simulationParameters.activeRecipe) {
-                const { templateId, values } = projectData.simulationParameters.activeRecipe;
-                if (templateId && values) {
-                    projectData.simulationParameters.recipes = Array.isArray(projectData.simulationParameters.recipes)
-                        ? projectData.simulationParameters.recipes.filter(r => r.templateId !== templateId)
-                        : [];
-                    projectData.simulationParameters.recipes.unshift({ templateId, values });
-                }
-            }
-
-            // 2. Generate all file contents in memory first.
-            const { materials, geometry } = await generateRadFileContent(projectData);
-            const viewpointContent = generateViewpointFileContent(projectData.viewpoint, projectData.geometry.room);
-            const fisheyeVpData = { ...projectData.viewpoint, 'view-type': 'h' };
-            const fisheyeContent = generateViewpointFileContent(fisheyeVpData, projectData.geometry.room);
-            const allPtsContent = await this._generateSensorPointsContent('all');
-            const taskPtsContent = await this._generateSensorPointsContent('task');
-            const surroundingPtsContent = await this._generateSensorPointsContent('surrounding');
-            const daylightingPtsContent = await this._generateDaylightingPointsContent();
-            const rayContent = await generateRayFileContent();
-    
-            // Generate .vf files for each saved camera view
-            const savedViewsData = projectData.savedViews || [];
-    
             // Sanitize the project data for JSON serialization by removing large file contents.
             const dataForJson = JSON.parse(JSON.stringify(projectData));
-            dataForJson.epwFileContent = null; 
-             if (dataForJson.simulationFiles) {
+            dataForJson.epwFileContent = null;
+            if (dataForJson.simulationFiles) {
                 Object.values(dataForJson.simulationFiles).forEach(file => { if (file) file.content = null; });
             }
             const projectJsonContent = JSON.stringify(dataForJson, null, 2);
-    
+
             // 3. Structure all generated content into a list of file objects.
             let filesToWrite = [
-                { path: ['01_geometry', `${projectName}.rad`], content: geometry },
-                { path: ['02_materials', `${projectName}_materials.rad`], content: materials },
-                { path: ['03_views', 'viewpoint.vf'], content: viewpointContent },
-                { path: ['03_views', 'viewpoint_fisheye.vf'], content: fisheyeContent },
-                { path: ['08_results', 'grid.pts'], content: allPtsContent },
-                { path: ['08_results', 'task_grid.pts'], content: taskPtsContent },
-                { path: ['08_results', 'surrounding_grid.pts'], content: surroundingPtsContent },
-                { path: ['08_results', 'view_grid.ray'], content: rayContent },
                 { path: [`${projectName}.json`], content: projectJsonContent }
             ];
-    
-            savedViewsData.forEach((view, index) => {
-                // De-serialize the state for the generation function
-                const cameraStateForVf = {
-                    position: new THREE.Vector3().fromArray(view.cameraState.position),
-                    quaternion: new THREE.Quaternion().fromArray(view.cameraState.quaternion),
-                    viewType: view.cameraState.viewType,
-                    fov: view.cameraState.fov,
-                };
-                const viewFileContent = generateViewpointFileContentFromState(cameraStateForVf);
-                if (viewFileContent) {
-                    filesToWrite.push({ path: ['03_views', `saved_view_${index + 1}.vf`], content: viewFileContent });
-                }
-            });
-    
-            if (daylightingPtsContent) {
-                filesToWrite.push({ path: ['08_results', 'daylighting_sensors.pts'], content: daylightingPtsContent });
-            }
-            // Add topography heightmap to the files to be written
-            const topoFile = this.simulationFiles['topo-heightmap-file'];
-            if (topoFile?.name && topoFile.content) {
-                filesToWrite.push({ path: ['12_topography', topoFile.name], content: topoFile.content });
-            }
+
+            // Add EPW and other simulation files if needed
             if (projectData.epwFileContent && projectData.projectInfo.epwFileName) {
                 filesToWrite.push({ path: ['04_skies', projectData.projectInfo.epwFileName], content: projectData.epwFileContent });
             }
@@ -722,7 +446,7 @@ class Project {
             }
             // Filter out any files that might not have content.
             filesToWrite = filesToWrite.filter(f => f.content !== null && f.content !== undefined);
-    
+
             // 4. Write the files using the appropriate method based on the environment.
             if (window.electronAPI && this.dirPath) {
                 // Electron Method: Send all data to the main process for efficient file writing.
@@ -737,23 +461,23 @@ class Project {
                     }
                     const fileHandle = await currentHandle.getFileHandle(file.path[file.path.length - 1], { create: true });
                     const writable = await fileHandle.createWritable();
-    
+
                     let contentToWrite = file.content;
                     // Safeguard: If content is a plain object, stringify it before writing.
                     if (typeof contentToWrite === 'object' && contentToWrite !== null && !(contentToWrite instanceof Blob) && !(contentToWrite instanceof ArrayBuffer) && !ArrayBuffer.isView(contentToWrite)) {
                         console.warn(`Content for ${file.path.join('/')} was an object. Auto-stringifying.`, contentToWrite);
                         contentToWrite = JSON.stringify(contentToWrite, null, 2);
                     }
-    
+
                     await writable.write(contentToWrite);
                     await writable.close();
                 }
             } else {
-                 throw new Error("No valid directory path or handle is available for saving.");
+                throw new Error("No valid directory path or handle is available for saving.");
             }
-            
+
             showAlert(`Project '${projectName}' saved successfully.`, 'Project Saved');
-    
+
         } catch (error) {
             if (error.name !== 'AbortError') {
                 console.error("Failed to save project:", error);
@@ -762,239 +486,11 @@ class Project {
         }
     }
 
-    async runLivePreviewRender() {
-        if (!window.electronAPI || !window.electronAPI.runLiveRender) {
-            throw new Error("Live rendering is not supported in this environment.");
-        }
 
-        const { getDom } = await import('./ui.js');
-        const dom = getDom();
 
-        const projectData = await this.gatherAllProjectData();
-        const date = dom['preview-date']._flatpickr.selectedDates[0];
-        const time = dom['preview-time'].value;
 
-        if (!date || !time) {
-            throw new Error("Please select a valid date and time for the preview.");
-        }
 
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
-        const [hour, minute] = time.split(':');
-        const decimalTime = parseInt(hour, 10) + parseInt(minute, 10) / 60;
 
-        const { materials, geometry } = await generateRadFileContent(projectData);
-        const viewpointContent = generateViewpointFileContent(projectData.viewpoint, projectData.geometry.room);
-
-        const payload = {
-            epwContent: this.epwFileContent,
-            geometryContent: geometry,
-            materialsContent: materials,
-            viewpointContent: viewpointContent,
-            month,
-            day,
-            time: decimalTime
-        };
-
-        // Call the backend to perform the render
-        const result = await window.electronAPI.runLiveRender(payload);
-        return result;
-    }
-    
-    async _generateSensorPointsContent(gridType = 'all') {
-        const { getDom, showAlert, getSensorGridParams } = await import('./ui.js');
-        const dom = getDom();
-        const points = [];
-
-        // Safely get dimension values
-        const getDimension = (id) => {
-            if (!dom[id]) {
-                console.warn(`DOM element with id '${id}' not found`);
-                return 0;
-            }
-            const value = parseFloat(dom[id].value);
-            return isNaN(value) ? 0 : value;
-        };
-        const W = getDimension('width');
-        const L = getDimension('length');
-        const H = getDimension('height');
-        const alphaRad = THREE.MathUtils.degToRad(getDimension('room-orientation'));
-        const cosA = Math.cos(alphaRad);
-        const sinA = Math.sin(alphaRad);
-
-        // Use the new, centralized utility functions from radiance.js
-        const transformPoint = (localPoint) => transformThreePointToRadianceArray(localPoint, W, L, cosA, sinA);
-        const transformVector = (localVector) => transformThreeVectorToRadianceArray(localVector, cosA, sinA);
-
-        const generatePointsInRect = (x, z, width, depth, spacing) => {
-            if (spacing <= 0 || width <= 0 || depth <= 0) return [];
-            const rectPositions = [];
-            const numX = Math.floor(width / spacing);
-            const numZ = Math.floor(depth / spacing);
-            if (numX === 0 || numZ === 0) return [];
-
-            const startX = x + (width - (numX > 1 ? (numX - 1) * spacing : 0)) / 2;
-            const startZ = z + (depth - (numZ > 1 ? (numZ - 1) * spacing : 0)) / 2;
-
-            for (let i = 0; i < numX; i++) {
-                 for (let j = 0; j < numZ; j++) {
-                    rectPositions.push({ x: startX + i * spacing, z: startZ + j * spacing });
-                }
-            }
-            return rectPositions;
-        };
-
-        const enGridParams = getSensorGridParams()?.illuminance?.floor;
-
-        if (gridType === 'task') {
-            if (!enGridParams?.isTaskArea) return null;
-            const spacing = getDimension('floor-grid-spacing');
-            const offset = getDimension('floor-grid-offset');
-            if (spacing <= 0) return null;
-            const { x, z, width, depth } = enGridParams.task;
-
-            const taskPoints = generatePointsInRect(x, z, width, depth, spacing);
-            const normalVector = [0, 0, 1]; // Normal for a horizontal plane
-
-            for (const p of taskPoints) {
-                const localPos = [p.x, p.z, offset];
-                const worldPos = transformPoint(localPos);
-                const worldNorm = transformVector(normalVector);
-                points.push(`${worldPos.map(c => c.toFixed(4)).join(' ')} ${worldNorm.map(c => c.toFixed(4)).join(' ')}`);
-            }
-        } else if (gridType === 'surrounding') {
-            if (!enGridParams?.isTaskArea || !enGridParams?.hasSurrounding) return null;
-
-            const spacing = getDimension('floor-grid-spacing');
-            const offset = getDimension('floor-grid-offset');
-            if (spacing <= 0) return null;
-            const task = enGridParams.task;
-            const bandWidth = enGridParams.surroundingWidth;
-
-            // Define outer rectangle (task area + surrounding band), clamped to room dimensions
-            const outerX = Math.max(0, task.x - bandWidth);
-            const outerZ = Math.max(0, task.z - bandWidth);
-            const outerW = Math.min(W - outerX, task.width + 2 * bandWidth);
-            const outerD = Math.min(L - outerZ, task.depth + 2 * bandWidth);
-
-            const outerPoints = generatePointsInRect(outerX, outerZ, outerW, outerD, spacing);
-            const normalVector = [0, 0, 1];
-
-            for (const p of outerPoints) {
-                // Check if the point is OUTSIDE the inner task area
-                const isOutsideTask = (p.x < task.x || p.x > task.x + task.width || p.z < task.z || p.z > task.z + task.depth);
-                if (isOutsideTask) {
-                    const localPos = [p.x, p.z, offset];
-                    const worldPos = transformPoint(localPos);
-                    const worldNorm = transformVector(normalVector);
-                    points.push(`${worldPos.map(c => c.toFixed(4)).join(' ')} ${worldNorm.map(c => c.toFixed(4)).join(' ')}`);
-                }
-            }
-        } else { // gridType === 'all'
-            // This is the original logic of the function
-            const generateCenteredPoints = (totalLength, spacing) => {
-                if (spacing <= 0 || totalLength <= 0) return [];
-                const numPoints = Math.floor(totalLength / spacing);
-                if (numPoints === 0) return [totalLength / 2];
-                const totalGridLength = (numPoints - 1) * spacing;
-                const start = (totalLength - totalGridLength) / 2;
-                return Array.from({ length: numPoints }, (_, i) => start + i * spacing);
-            };
-
-            const surfaces = [
-                { name: 'floor', enabled: dom['grid-floor-toggle']?.checked }, { name: 'ceiling', enabled: dom['grid-ceiling-toggle']?.checked },
-                { name: 'north', enabled: dom['grid-north-toggle']?.checked }, { name: 'south', enabled: dom['grid-south-toggle']?.checked },
-                { name: 'east', enabled: dom['grid-east-toggle']?.checked }, { name: 'west', enabled: dom['grid-west-toggle']?.checked },
-            ];
-
-            surfaces.forEach(({ name, enabled }) => {
-                if (!enabled) return;
-                let spacing, offset, points1, points2, positionFunc, normalVector;
-                if (name === 'floor' || name === 'ceiling') {
-                    spacing = getDimension(`${name}-grid-spacing`);
-                    offset = getDimension(`${name}-grid-offset`);
-                    points1 = generateCenteredPoints(W, spacing);
-                    points2 = generateCenteredPoints(L, spacing);
-                    // CORRECTED: Define normals in Three.js coordinate system (Y-up)
-                    normalVector = (name === 'floor') ? [0, 1, 0] : [0, -1, 0];
-                    positionFunc = (p1, p2) => [p1, name === 'floor' ? offset : H + offset, p2]; // Y is height
-                } else {
-                    spacing = getDimension('wall-grid-spacing');
-                    offset = getDimension('wall-grid-offset');
-                    points2 = generateCenteredPoints(H, spacing); // Height is vertical span
-                    const wallLength = (name === 'north' || name === 'south') ? W : L;
-                    points1 = generateCenteredPoints(wallLength, spacing); // Width/Length is horizontal span
-
-                    // CORRECTED: Define normals in Three.js coordinate system (Y-up) and adjust positionFunc
-                    switch (name) {
-                        case 'north': normalVector = [0, 0, 1]; positionFunc = (p1, p2) => [p1, p2, offset]; break;
-                        case 'south': normalVector = [0, 0, -1]; positionFunc = (p1, p2) => [p1, p2, L - offset]; break;
-                        case 'west':  normalVector = [1, 0, 0]; positionFunc = (p1, p2) => [offset, p2, p1]; break;
-                        case 'east':  normalVector = [-1, 0, 0]; positionFunc = (p1, p2) => [W - offset, p2, p1]; break;
-                    }
-                }
-                for (const p1 of points1) {
-                    for (const p2 of points2) {
-                        const localPos = positionFunc(p1, p2);
-                        const worldPos = transformPoint(localPos);
-                        const worldNorm = transformVector(normalVector);
-                        points.push(`${worldPos.map(c => c.toFixed(4)).join(' ')} ${worldNorm.map(c => c.toFixed(4)).join(' ')}`);
-                    }
-                }
-            });
-        }
-
-        if (points.length === 0) {
-            if (gridType === 'all') { // Only show alert for the main grid generation
-                 showAlert("No sensor grids enabled; sensor points file will be empty.", "Info");
-            }
-            return null;
-        }
-        return "# Radiance Sensor Points (X Y Z Vx Vy Vz)\n" + points.join('\n');
-    }
-
-    async _generateDaylightingPointsContent() {
-        const lightingState = lightingManager.getCurrentState();
-        if (!lightingState?.daylighting?.enabled || !lightingState.daylighting.sensors?.length) {
-            return null; // No sensors to write
-        }
-
-        const { getDom } = await import('./ui.js');
-        const dom = getDom();
-
-        // Safely get dimension values
-        const getDimension = (id) => {
-            if (!dom[id]) {
-                console.warn(`DOM element with id '${id}' not found`);
-                return 0;
-            }
-            const value = parseFloat(dom[id].value);
-            return isNaN(value) ? 0 : value;
-        };
-        const W = getDimension('width');
-        const L = getDimension('length');
-        const rotationY = getDimension('room-orientation');
-        const alphaRad = THREE.MathUtils.degToRad(rotationY);
-        const cosA = Math.cos(alphaRad);
-        const sinA = Math.sin(alphaRad);
-
-        const points = lightingState.daylighting.sensors.map(sensor => {
-            // The sensor object contains {x, y, z} position and {x, y, z} direction
-            const posThree = [sensor.x, sensor.y, sensor.z];
-            const dirThree = [sensor.direction.x, sensor.direction.y, sensor.direction.z];
-
-            // Use the new, centralized utility functions
-            const worldPosArray = transformThreePointToRadianceArray(posThree, W, L, cosA, sinA);
-            const worldNormArray = transformThreeVectorToRadianceArray(dirThree, cosA, sinA);
-
-            const worldPos = worldPosArray.map(c => c.toFixed(4)).join(' ');
-            const worldNorm = worldNormArray.map(c => c.toFixed(4)).join(' ');
-
-            return `${worldPos} ${worldNorm}`;
-        });
-
-    return "# Radiance Daylighting Control Sensor Points (X Y Z Vx Vy Vz)\n" + points.join('\n');
-}
 
     async loadProject() {
         if (!window.showDirectoryPicker) {
@@ -1020,7 +516,7 @@ class Project {
             const file = await jsonFileHandle.getFile();
             const settings = JSON.parse(await file.text());
 
-            this.simulationFiles = {}; 
+            this.simulationFiles = {};
             this.epwFileContent = null;
             // Clear any existing saved views before loading new ones
             const { loadSavedViews } = await import('./ui.js');
@@ -1058,7 +554,7 @@ class Project {
                 const content = await readFileContent(['04_skies', settings.projectInfo.epwFileName]);
                 if (content) this.setEpwData(content);
             }
-            
+
             if (settings.simulationFiles) {
                 const filePromises = Object.entries(settings.simulationFiles).map(async ([key, fileData]) => {
                     if (fileData?.name) {
@@ -1069,7 +565,7 @@ class Project {
                 });
                 // Restore the daylighting schedule file if it was saved with the lighting state
                 const lightingScheduleInfo = settings.lighting?.daylighting?.scheduleFile;
-               if (lightingScheduleInfo?.name) {
+                if (lightingScheduleInfo?.name) {
                     const content = await readFileContent(['10_schedules', lightingScheduleInfo.name]);
                     if (content) {
                         this.addSimulationFile('daylighting-availability-schedule', lightingScheduleInfo.name, content);
@@ -1084,7 +580,7 @@ class Project {
                         this.addSimulationFile('topo-heightmap-file', settings.topography.heightmapFile.name, blob);
                     }
                 }
-                
+
                 await Promise.all(filePromises);
             }
 
@@ -1130,7 +626,7 @@ class Project {
         // --- Project Info & EPW ---
         Object.keys(settings.projectInfo).forEach(key => setValue(key, settings.projectInfo[key]));
         if (this.epwFileContent) {
-           dom['epw-file-name'].textContent = settings.projectInfo.epwFileName || 'climate.epw';
+            dom['epw-file-name'].textContent = settings.projectInfo.epwFileName || 'climate.epw';
         }
 
         // --- Geometry & Apertures ---
@@ -1156,10 +652,10 @@ class Project {
                     setValue(`win-height-${dir}`, apertureData.wh);
                     setValue(`sill-height-${dir}`, apertureData.sh);
                 }
-                
-            // Always set window depth position if aperture data exists
-            setValue(`win-depth-pos-${dir}`, apertureData.winDepthPos);
-            setValue(`win-depth-pos-${dir}-manual`, apertureData.winDepthPos);
+
+                // Always set window depth position if aperture data exists
+                setValue(`win-depth-pos-${dir}`, apertureData.winDepthPos);
+                setValue(`win-depth-pos-${dir}-manual`, apertureData.winDepthPos);
             }
             const shadingData = settings.geometry.shading[key];
             setChecked(`shading-${dir}-toggle`, !!shadingData);
@@ -1167,10 +663,10 @@ class Project {
                 setValue(`shading-type-${dir}`, shadingData.type);
                 ui.handleShadingTypeChange(dir, false); // This reveals the correct controls panel
 
-                    // Handle existing, non-generative shading types
-                    if (shadingData.overhang) Object.keys(shadingData.overhang).forEach(p => setValue(`overhang-${p}-${dir}`, shadingData.overhang[p]));
-                    if (shadingData.lightshelf) Object.keys(shadingData.lightshelf).forEach(p => setValue(`lightshelf-${p}-${dir}`, shadingData.lightshelf[p]));
-                    if (shadingData.louver) Object.keys(shadingData.louver).forEach(p => setValue(`louver-${p}-${dir}`, shadingData.louver[p]));
+                // Handle existing, non-generative shading types
+                if (shadingData.overhang) Object.keys(shadingData.overhang).forEach(p => setValue(`overhang-${p}-${dir}`, shadingData.overhang[p]));
+                if (shadingData.lightshelf) Object.keys(shadingData.lightshelf).forEach(p => setValue(`lightshelf-${p}-${dir}`, shadingData.lightshelf[p]));
+                if (shadingData.louver) Object.keys(shadingData.louver).forEach(p => setValue(`louver-${p}-${dir}`, shadingData.louver[p]));
             }
         });
 
@@ -1179,11 +675,11 @@ class Project {
         setValue('frame-thick', settings.geometry.frames.thickness);
         setValue('frame-depth', settings.geometry.frames.depth);
         ['wall', 'floor', 'ceiling', 'frame', 'shading', 'glazing', 'furniture'].forEach(type => {
-            if(settings.materials[type]) {
-            const mat = settings.materials[type];
-                if(mat.type) setValue(`${type}-mat-type`, mat.type);
-                if(mat.reflectance) setValue(`${type}-refl`, mat.reflectance);
-                if(mat.specularity) setValue(`${type}-spec`, mat.specularity);
+            if (settings.materials[type]) {
+                const mat = settings.materials[type];
+                if (mat.type) setValue(`${type}-mat-type`, mat.type);
+                if (mat.reflectance) setValue(`${type}-refl`, mat.reflectance);
+                if (mat.specularity) setValue(`${type}-spec`, mat.specularity);
                 if ((type === 'wall' || type === 'floor' || type === 'ceiling') && mat.mode === 'srd') {
                     dom[`${type}-mode-srd`]?.click();
                     if (mat.srdFile?.name && dom[`${type}-srd-file`]) {
@@ -1194,8 +690,8 @@ class Project {
                         }
                     }
                 }
-                if(mat.roughness) setValue(`${type}-rough`, mat.roughness);
-                if(mat.transmittance) setValue(`${type}-trans`, mat.transmittance);
+                if (mat.roughness) setValue(`${type}-rough`, mat.roughness);
+                if (mat.transmittance) setValue(`${type}-trans`, mat.transmittance);
             }
         });
         setChecked('bsdf-toggle', settings.materials.glazing.bsdfEnabled);
@@ -1204,10 +700,10 @@ class Project {
         if (settings.geometry.furniture && Array.isArray(settings.geometry.furniture)) {
             const { addFurniture, furnitureObject } = await import('./geometry.js');
             // Clear any existing furniture before loading
-            while(furnitureObject.children.length > 0) furnitureObject.remove(furnitureObject.children[0]);
+            while (furnitureObject.children.length > 0) furnitureObject.remove(furnitureObject.children[0]);
 
             settings.geometry.furniture.forEach(item => {
-                const newObj = addFurniture(item.assetType, new THREE.Vector3(0,0,0)); // Add at origin first
+                const newObj = addFurniture(item.assetType, new THREE.Vector3(0, 0, 0)); // Add at origin first
                 if (newObj) {
                     newObj.position.fromArray(item.position);
                     newObj.quaternion.fromArray(item.quaternion);
@@ -1242,23 +738,7 @@ class Project {
             });
         }
 
-        // --- Artificial Lighting ---
-        // Manually update the file input display for daylighting schedule if it exists
-        if (settings.lighting?.daylighting?.scheduleFile?.name && dom['daylighting-availability-schedule']) {
-            const input = dom['daylighting-availability-schedule'];
-            const inputId = input.id;
-            let display = input.parentElement.querySelector(`span[data-file-display-for="${inputId}"]`);
-            if (!display) {
-                display = document.createElement('span');
-                display.className = 'text-xs text-gray-400 ml-2';
-                display.dataset.fileDisplayFor = inputId;
-                input.after(display);
-            }
-            display.textContent = settings.lighting.daylighting.scheduleFile.name;
-            display.title = settings.lighting.daylighting.scheduleFile.name;
-        }
 
-        lightingManager.applyState(settings.lighting);
 
         // --- Viewpoint ---
         if (settings.viewpoint) {
@@ -1283,8 +763,8 @@ class Project {
             setChecked('ground-plane-toggle', vo.ground);
             setChecked('world-axes-toggle', vo.worldAxes);
             setValue('world-axes-size', vo.worldAxesSize);
-            if(vo.hSection) { setChecked('h-section-toggle', vo.hSection.enabled); setValue('h-section-dist', vo.hSection.dist); }
-            if(vo.vSection) { setChecked('v-section-toggle', vo.vSection.enabled); setValue('v-section-dist', vo.vSection.dist); }
+            if (vo.hSection) { setChecked('h-section-toggle', vo.hSection.enabled); setValue('h-section-dist', vo.hSection.dist); }
+            if (vo.vSection) { setChecked('v-section-toggle', vo.vSection.enabled); setValue('v-section-dist', vo.vSection.dist); }
         }
 
         // --- Sensor Grids ---
@@ -1325,7 +805,7 @@ class Project {
             if (sg.view) {
                 setChecked('view-grid-toggle', sg.view.enabled); setChecked('show-view-grid-3d-toggle', sg.view.showIn3D); setValue('view-grid-spacing', sg.view.spacing);
                 setValue('view-grid-offset', sg.view.offset); setValue('view-grid-directions', sg.view.numDirs);
-                if(sg.view.startVec && Array.isArray(sg.view.startVec)) {
+                if (sg.view.startVec && Array.isArray(sg.view.startVec)) {
                     setValue('view-grid-start-vec-x', sg.view.startVec[0]);
                     setValue('view-grid-start-vec-y', sg.view.startVec[1]);
                     setValue('view-grid-start-vec-z', sg.view.startVec[2]);
@@ -1356,7 +836,7 @@ class Project {
             }
         }
 
-    // --- Visualization Colors & Analysis Panel State ---
+        // --- Visualization Colors & Analysis Panel State ---
         if (settings.visualization) {
             const viz = settings.visualization;
             // Set simple values first
@@ -1380,49 +860,49 @@ class Project {
             recreateSimulationPanels(settings.simulationParameters, this.simulationFiles, ui);
         }
 
-    // --- Saved Views ---
-    if (settings.savedViews) {
-        const viewsToLoad = settings.savedViews.map(view => ({
-            ...view,
-            cameraState: {
-                position: new THREE.Vector3().fromArray(view.cameraState.position),
-                quaternion: new THREE.Quaternion().fromArray(view.cameraState.quaternion),
-                zoom: view.cameraState.zoom,
-                target: new THREE.Vector3().fromArray(view.cameraState.target),
-                viewType: view.cameraState.viewType,
-                fov: view.cameraState.fov
-            }
-        }));
-        ui.loadSavedViews(viewsToLoad);
-    } else {
-        ui.loadSavedViews([]); // Clear views if none are in the project file
-    }
+        // --- Saved Views ---
+        if (settings.savedViews) {
+            const viewsToLoad = settings.savedViews.map(view => ({
+                ...view,
+                cameraState: {
+                    position: new THREE.Vector3().fromArray(view.cameraState.position),
+                    quaternion: new THREE.Quaternion().fromArray(view.cameraState.quaternion),
+                    zoom: view.cameraState.zoom,
+                    target: new THREE.Vector3().fromArray(view.cameraState.target),
+                    viewType: view.cameraState.viewType,
+                    fov: view.cameraState.fov
+                }
+            }));
+            ui.loadSavedViews(viewsToLoad);
+        } else {
+            ui.loadSavedViews([]); // Clear views if none are in the project file
+        }
 
-    // --- Topography ---
-    if (settings.topography) {
-        if (settings.topography.enabled) {
-            dom['context-mode-topo']?.click();
-            setValue('topo-plane-size', settings.topography.planeSize);
-            setValue('topo-vertical-scale', settings.topography.verticalScale);
-            // The file content (as a Blob) is already in `this.simulationFiles`.
-            // We need to trigger the geometry creation from the UI handler.
-            const topoFile = this.simulationFiles['topo-heightmap-file'];
-            if (topoFile && topoFile.content) { // content is a Blob
-                const event = new Event('change');
-                // Simulate a file input change event for ui.js to handle
-                Object.defineProperty(event, 'target', { writable: false, value: { files: [topoFile.content] } });
-                dom['topo-heightmap-file']?.dispatchEvent(event);
+        // --- Topography ---
+        if (settings.topography) {
+            if (settings.topography.enabled) {
+                dom['context-mode-topo']?.click();
+                setValue('topo-plane-size', settings.topography.planeSize);
+                setValue('topo-vertical-scale', settings.topography.verticalScale);
+                // The file content (as a Blob) is already in `this.simulationFiles`.
+                // We need to trigger the geometry creation from the UI handler.
+                const topoFile = this.simulationFiles['topo-heightmap-file'];
+                if (topoFile && topoFile.content) { // content is a Blob
+                    const event = new Event('change');
+                    // Simulate a file input change event for ui.js to handle
+                    Object.defineProperty(event, 'target', { writable: false, value: { files: [topoFile.content] } });
+                    dom['topo-heightmap-file']?.dispatchEvent(event);
+                }
             }
         }
-    }
 
-    // --- Final UI & Scene Updates ---
-    ui.updateAllLabels();
-    updateScene();
+        // --- Final UI & Scene Updates ---
+        ui.updateAllLabels();
+        updateScene();
 
-    // Finally, show the success message
-    if (showAlertCallback) {
-        showAlertCallback(`Project "${settings.projectInfo['project-name']}" loaded successfully.`, 'Project Loaded');
+        // Finally, show the success message
+        if (showAlertCallback) {
+            showAlertCallback(`Project "${settings.projectInfo['project-name']}" loaded successfully.`, 'Project Loaded');
         }
     }
 }

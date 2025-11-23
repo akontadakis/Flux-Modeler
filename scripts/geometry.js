@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { renderer, horizontalClipPlane, verticalClipPlane, sensorTransformControls, importedModelObject } from './scene.js';
-import { getAllWindowParams, getAllShadingParams, validateInputs, getWindowParamsForWall, getSensorGridParams, scheduleUpdate } from './ui.js';
+import { getAllWindowParams, getAllShadingParams, validateInputs, getWindowParamsForWall, scheduleUpdate } from './ui.js';
 import { getDom } from './dom.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
@@ -28,7 +28,7 @@ const SURFACE_TYPES = {
 // --- GEOMETRY GROUPS ---
 export const roomObject = new THREE.Group();
 export const shadingObject = new THREE.Group();
-export const sensorGridObject = new THREE.Group();
+
 export const resizeHandlesObject = new THREE.Group();
 export const wallSelectionGroup = new THREE.Group(); // Group for selectable walls
 export const axesObject = new THREE.Group();
@@ -43,13 +43,12 @@ export const vegetationObject = new THREE.Group();
 const vegetationContainer = new THREE.Group();
 vegetationObject.add(vegetationContainer);
 
-export const daylightingSensorsGroup = new THREE.Group();
+
 const taskAreaHelpersGroup = new THREE.Group();
 
 // --- MODULE STATE & SHARED RESOURCES ---
 export let currentImportedModel = null;
-export let sensorMeshes = []; // Store references to instanced meshes for results
-export let daylightingSensorMeshes = []; // Store references to individual sensor meshes for gizmo control
+
 export let importedShadingObjects = []; // Store references to imported OBJ meshes for selection
 
 // Context Object Management System
@@ -119,9 +118,7 @@ function disposeMeshLike(obj) {
 }
 
 function clearGroup(group) {
-    if (group === sensorGridObject) {
-        sensorMeshes.length = 0; // Clear the references when clearing the group
-    }
+
     if (group === resizeHandlesObject) {
         // No specific cleanup needed yet, but good to have the case
     }
@@ -131,9 +128,7 @@ function clearGroup(group) {
     if (group === furnitureObject) {
         // Any specific cleanup for furniture can go here
     }
-    if (group === daylightingSensorsGroup) {
-        daylightingSensorMeshes.length = 0;
-    }
+
     if (group === shadingObject) {
         importedShadingObjects.length = 0;
     }
@@ -177,23 +172,23 @@ export async function updateScene(changedId = null) {
     const { W, L, H, rotationY, elevation } = readParams();
 
     // Apply room rotation and elevation to all relevant geometry groups
-    const groupsToTransform = [roomObject, shadingObject, sensorGridObject, wallSelectionGroup, furnitureObject, daylightingSensorsGroup, resizeHandlesObject, vegetationObject];
+    const groupsToTransform = [roomObject, shadingObject, wallSelectionGroup, furnitureObject, resizeHandlesObject, vegetationObject];
     groupsToTransform.forEach(group => {
         group.rotation.y = rotationY;
         group.position.y = elevation;
     });
 
-    const showGround = dom['ground-plane-toggle'].checked;
+    const showGround = dom['ground-plane-toggle']?.checked ?? true;
     groundObject.visible = showGround;
     northArrowObject.visible = true; // North Arrow is now always visible
 
     // Update clipping planes
     const activeClippingPlanes = [];
-    if (dom['h-section-toggle'].checked) {
+    if (dom['h-section-toggle']?.checked) {
         horizontalClipPlane.constant = parseFloat(dom['h-section-dist'].value);
         activeClippingPlanes.push(horizontalClipPlane);
     }
-    if (dom['v-section-toggle'].checked) {
+    if (dom['v-section-toggle']?.checked) {
         const vDist = parseFloat(dom['v-section-dist'].value);
         verticalClipPlane.constant = vDist - W / 2;
         activeClippingPlanes.push(verticalClipPlane);
@@ -208,11 +203,11 @@ export async function updateScene(changedId = null) {
     // Recreate all geometry based on the new parameters
     createRoomGeometry();
     createShadingDevices();
-    createSensorGrid();
+
     createGroundPlane();
     createNorthArrow();
     createResizeHandles();
-    updateDaylightingSensorVisuals();
+
 
     // Create or update the world axes helper
     let axesHelper = axesObject.getObjectByName('axesHelper');
@@ -572,198 +567,7 @@ function _createWallSegment(key, props, winParams, { H, wallThickness }) {
 /**
  * Creates the sensor grid geometry for all selected surfaces.
  */
-export function createSensorGrid() {
-    clearGroup(sensorGridObject);
-    const dom = getDom();
-    const { W, L, H } = readParams();
-    const gridParams = getSensorGridParams();
-    if (!gridParams) return;
 
-    const gridContainer = new THREE.Group();
-    gridContainer.position.set(-W / 2, 0, -L / 2);
-
-    // Visualize Illuminance Grids (Spheres)
-    if (gridParams.illuminance.enabled && gridParams.illuminance.showIn3D) {
-        const surfaces = ['floor', 'ceiling', 'north', 'south', 'east', 'west'];
-        surfaces.forEach(surface => {
-            if (dom[`grid-${surface}-toggle`]?.checked) {
-                createGridForSurface(surface, W, L, H, gridContainer, 'illuminance', gridParams);
-            }
-        });
-        // Add visual helpers for task/surrounding areas
-        _createTaskAreaVisuals(W, L, gridContainer, gridParams);
-    }
-
-    // Visualize View Grids (Arrows on floor)
-    if (gridParams.view.enabled && gridParams.view.showIn3D) {
-        createGridForSurface('floor', W, L, H, gridContainer, 'view', gridParams);
-    }
-
-    sensorGridObject.add(gridContainer);
-}
-
-/**
- * Generates an array of centered point coordinates along a single axis.
- * @param {number} totalLength The total length of the surface.
- * @param {number} spacing The distance between points.
- * @returns {number[]} An array of coordinate values.
- */
-function generateCenteredPoints(totalLength, spacing) {
-    if (spacing <= 0 || totalLength <= 0) return [];
-
-    const numPoints = Math.floor(totalLength / spacing);
-    if (numPoints === 0) return [];
-
-    // If there's only one point, it should be in the center.
-    if (numPoints === 1) {
-        return [totalLength / 2];
-    }
-
-    const totalGridLength = (numPoints - 1) * spacing;
-    const start = (totalLength - totalGridLength) / 2;
-
-    return Array.from({ length: numPoints }, (_, i) => start + i * spacing);
-}
-
-/**
- * Generates an array of Vector3 positions for a grid on a specific surface.
- * @param {string} surface - The name of the surface ('floor', 'north', etc.).
- * @param {number} W - Room width.
- * @param {number} L - Room length.
- * @param {number} H - Room height.
- * @returns {THREE.Vector3[]} An array of sensor positions.
- */
-function _generateGridPositions(surface, W, L, H) {
-    const gridParams = getSensorGridParams();
-    const positions = [];
-
-    const generatePointsInRect = (x, z, width, depth, spacing) => {
-        if (spacing <= 0 || width <= 0 || depth <= 0) return [];
-        const rectPositions = [];
-        const numX = Math.floor(width / spacing);
-        const numZ = Math.floor(depth / spacing);
-        if (numX === 0 || numZ === 0) return [];
-        const startX = x + (width - (numX > 1 ? (numX - 1) * spacing : 0)) / 2;
-        const startZ = z + (depth - (numZ > 1 ? (numZ - 1) * spacing : 0)) / 2;
-        for (let i = 0; i < numX; i++) {
-            for (let j = 0; j < numZ; j++) {
-                rectPositions.push({ x: startX + i * spacing, z: startZ + j * spacing });
-            }
-        }
-        return rectPositions;
-    };
-
-    const strategies = {
-        floor: () => {
-            const params = gridParams.illuminance.floor;
-            if (!params.isTaskArea) {
-                const pointsX = generateCenteredPoints(W, params.spacing);
-                const pointsZ = generateCenteredPoints(L, params.spacing);
-                for (const x of pointsX) for (const z of pointsZ) positions.push(new THREE.Vector3(x, params.offset, z));
-            } else {
-                const task = params.task;
-                generatePointsInRect(task.x, task.z, task.width, task.depth, params.spacing)
-                    .forEach(p => positions.push(new THREE.Vector3(p.x, params.offset, p.z)));
-                if (params.hasSurrounding) {
-                    const band = params.surroundingWidth;
-                    const outerX = Math.max(0, task.x - band);
-                    const outerZ = Math.max(0, task.z - band);
-                    const outerW = Math.min(W - outerX, task.width + 2 * band);
-                    const outerD = Math.min(L - outerZ, task.depth + 2 * band);
-                    generatePointsInRect(outerX, outerZ, outerW, outerD, params.spacing).forEach(p => {
-                        if (p.x < task.x || p.x > task.x + task.width || p.z < task.z || p.z > task.z + task.depth) {
-                            positions.push(new THREE.Vector3(p.x, params.offset, p.z));
-                        }
-                    });
-                }
-            }
-        },
-        ceiling: () => {
-            const params = gridParams.illuminance.ceiling;
-            const pointsX = generateCenteredPoints(W, params.spacing);
-            const pointsZ = generateCenteredPoints(L, params.spacing);
-            for (const x of pointsX) for (const z of pointsZ) positions.push(new THREE.Vector3(x, H + params.offset, z));
-        },
-        walls: (orientation) => {
-            const params = gridParams.illuminance.walls;
-            const wallLength = (orientation === 'north' || orientation === 'south') ? W : L;
-            const points1 = generateCenteredPoints(wallLength, params.spacing);
-            const points2 = generateCenteredPoints(H, params.spacing);
-            const positionFuncs = {
-                north: (p1, p2) => new THREE.Vector3(p1, p2, params.offset),
-                south: (p1, p2) => new THREE.Vector3(p1, p2, L - params.offset),
-                west: (p1, p2) => new THREE.Vector3(params.offset, p2, p1),
-                east: (p1, p2) => new THREE.Vector3(W - params.offset, p2, p1),
-            };
-            for (const p1 of points1) for (const p2 of points2) positions.push(positionFuncs[orientation](p1, p2));
-        }
-    };
-
-    if (surface === 'ceiling' || surface === 'floor') {
-        strategies[surface]();
-    } else if (['north', 'south', 'east', 'west'].includes(surface)) {
-        strategies.walls(surface);
-    }
-
-    return positions;
-}
-
-/**
- * Helper to create a grid of sensor points on a specific surface using InstancedMesh.
- */
-function createGridForSurface(surface, W, L, H, container, visualizationType, gridParams) {
-    if (visualizationType === 'illuminance') {
-        const positions = _generateGridPositions(surface, W, L, H);
-
-        if (positions.length > 0) {
-            const sensorColor = getComputedStyle(document.documentElement).getPropertyValue('--illuminance-grid-color').trim();
-            const sensorMaterial = new THREE.MeshBasicMaterial({ color: sensorColor });
-            const instanced = new THREE.InstancedMesh(shared.sensorGeom, sensorMaterial, positions.length);
-            applyClippingToMaterial(instanced.material, renderer.clippingPlanes);
-            const dummy = new THREE.Object3D();
-            positions.forEach((pos, idx) => {
-                dummy.position.copy(pos);
-                dummy.updateMatrix();
-                instanced.setMatrixAt(idx, dummy.matrix);
-            });
-            instanced.instanceMatrix.needsUpdate = true;
-            container.add(instanced);
-            sensorMeshes.push(instanced); // Store the reference
-        }
-
-    } else if (visualizationType === 'view' && surface === 'floor') {
-        const { spacing, offset, numDirs, startVec } = gridParams.view;
-        if (!spacing || !(spacing > 0) || !numDirs || !(numDirs > 0)) return;
-
-        const pointsX = generateCenteredPoints(W, spacing);
-        const pointsZ = generateCenteredPoints(L, spacing);
-
-        const positions = [];
-        for (const x of pointsX) {
-            for (const z of pointsZ) {
-                positions.push(new THREE.Vector3(x, offset, z));
-            }
-        }
-
-        if (positions.length === 0) return;
-
-        const startVector = new THREE.Vector3().fromArray(startVec).normalize();
-        const upVector = new THREE.Vector3(0, 1, 0); // Y is up in local THREE.js space
-        const arrowColor = getComputedStyle(document.documentElement).getPropertyValue('--view-grid-color').trim();
-        const arrowLength = spacing * 0.25;
-        const viewGridGroup = new THREE.Group();
-
-        positions.forEach(origin => {
-            for (let k = 0; k < numDirs; k++) {
-                const angle = (k / numDirs) * 2 * Math.PI;
-                const direction = startVector.clone().applyAxisAngle(upVector, angle);
-                const arrowHelper = new THREE.ArrowHelper(direction, origin, arrowLength, arrowColor, arrowLength * 0.3, arrowLength * 0.2);
-                viewGridGroup.add(arrowHelper);
-            }
-        });
-        container.add(viewGridGroup);
-    }
-}
 
 /**
  * Creates a 3D North arrow indicator.
@@ -1265,70 +1069,7 @@ export function updateSensorGridColors(resultsData) {
     }
 }
 
-/**
- * Creates and updates the 3D visualization for the individual daylighting control sensors.
- */
-export function updateDaylightingSensorVisuals() {
-    const dom = getDom();
-    if (!daylightingSensorsGroup) return;
 
-    clearGroup(daylightingSensorsGroup);
-
-    const isEnabled = dom['daylighting-enabled-toggle']?.checked;
-    if (!isEnabled) {
-        daylightingSensorsGroup.visible = false;
-        sensorTransformControls.detach();
-        return;
-    }
-    daylightingSensorsGroup.visible = true;
-
-    const { W, L, H } = readParams();
-    // This container is offset to match the room's corner-origin coordinate system.
-    // The sensor positions, which are now centered, will be added relative to this container.
-    const sensorContainer = new THREE.Group();
-    sensorContainer.position.set(-W / 2, 0, -L / 2);
-    daylightingSensorsGroup.add(sensorContainer);
-
-    const sensorCount = parseInt(dom['daylight-sensor-count']?.value, 10) || 1;
-    let sensorColor = getComputedStyle(document.documentElement).getPropertyValue('--daylighting-sensor-color').trim() || '#00ff00';
-
-    const geometry = new THREE.BoxGeometry(0.12, 0.04, 0.12);
-    const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(sensorColor),
-        emissive: new THREE.Color(sensorColor),
-        emissiveIntensity: 0.5,
-    });
-
-    for (let i = 1; i <= sensorCount; i++) {
-        const sensorDef = {
-            x: parseFloat(dom[`daylight-sensor${i}-x`]?.value),
-            y: parseFloat(dom[`daylight-sensor${i}-y`]?.value),
-            z: parseFloat(dom[`daylight-sensor${i}-z`]?.value)
-        };
-        if (isNaN(sensorDef.x) || isNaN(sensorDef.y) || isNaN(sensorDef.z)) continue;
-
-        const sensorGroup = new THREE.Group();
-        sensorGroup.name = `daylightingSensor${i}`;
-        sensorGroup.add(new THREE.Mesh(geometry, material.clone()));
-
-        const dir = {
-            x: parseFloat(dom[`daylight-sensor${i}-dir-x`].value),
-            y: parseFloat(dom[`daylight-sensor${i}-dir-y`].value),
-            z: parseFloat(dom[`daylight-sensor${i}-dir-z`].value)
-        };
-        const directionVec = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-        sensorGroup.add(new THREE.ArrowHelper(directionVec, new THREE.Vector3(0, 0.02, 0), 0.4, 0xffff00));
-
-        // The sensor's (x,z) position comes from a centered slider (-W/2 to W/2).
-        // To place it correctly inside the offset container, we add W/2.
-        sensorGroup.position.set(sensorDef.x + W / 2, sensorDef.y, sensorDef.z + L / 2);
-        sensorContainer.add(sensorGroup);
-        daylightingSensorMeshes.push(sensorGroup);
-    }
-
-    // Attach the gizmo to the appropriate sensor based on the current UI toggle state.
-    attachGizmoToSelectedSensor();
-}
 
 /**
  * Clears any existing wall highlight by restoring its original material.

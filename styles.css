@@ -1091,7 +1091,8 @@ html[data-theme="cyber"] .energyplus-help-box {
 }
 
 /* Ensure EnergyPlus configuration panel uses standard window-content scroll + scrollbar */
-#panel-energyplus .window-content {
+#panel-checklist .window-content,
+#panel-run .window-content {
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1539,23 +1540,23 @@ html[data-theme="light"] .leaflet-tile-pane {
   display: none;
   visibility: hidden;
   opacity: 0;
-  position: absolute;
-  bottom: 130%;
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
   width: 350px;
-  padding: 1rem;
+  max-width: 90vw;
+  padding: 0.875rem;
   border-radius: 0.5rem;
   background-color: var(--text-primary);
   color: var(--bg-main);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 0.75rem;
+  line-height: 1.4;
   font-weight: 400;
   font-style: normal;
   text-align: left;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
+  z-index: 10000;
   transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+  white-space: normal;
 }
 
 .info-box {
@@ -1985,8 +1986,20 @@ html[data-theme="light"] .leaflet-tile-pane {
 
 .welcome-option-card:hover {
   transform: translateY(-5px);
-  border-color: var(--highlight-color);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  border-color: #F59E0B;
+  /* Sun Amber */
+  /* An inset shadow representing heat/light entering the card */
+  box-shadow:
+    inset 20px 20px 60px rgba(245, 158, 11, 0.15),
+    /* Warm internal glow */
+    0 8px 30px rgba(245, 158, 11, 0.2);
+  /* External casting shadow */
+}
+
+.welcome-option-card:hover .option-icon {
+  color: #F59E0B;
+  transform: scale(1.1) rotate(15deg);
+  /* Sun icon rotates slightly */
 }
 
 .welcome-option-card .option-icon {
@@ -2024,8 +2037,8 @@ html[data-theme="light"] .leaflet-tile-pane {
 }
 
 #welcome-logo-container {
-  width: 140px;
-  height: 140px;
+  width: 100px;
+  height: 100px;
   position: relative;
   top: -12px;
   /* Adjust this value to shift the logo vertically */

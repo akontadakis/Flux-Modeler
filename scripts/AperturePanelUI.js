@@ -31,8 +31,7 @@ export class AperturePanelUI {
         // 1. Wall Selection
         content.appendChild(this.createWallSelectionSection());
 
-        // 2. Sun Ray Tracing (Global)
-        content.appendChild(this.createSunRayTraceSection());
+
 
         // 3. Orientation Controls (N, S, E, W)
         this.orientations.forEach(orient => {
@@ -78,54 +77,7 @@ export class AperturePanelUI {
         return div;
     }
 
-    createSunRayTraceSection() {
-        const div = document.createElement('div');
-        div.id = 'sun-ray-trace-section';
-        div.className = 'hidden space-y-3 pt-4 mt-4 border-t-2 border-[--grid-color]';
 
-        div.innerHTML = `
-            <h3 class="font-semibold text-sm uppercase">Sun Ray Tracing</h3>
-            <p class="info-box !text-xs !py-2 !px-3">Visualize direct sun penetration and bounces. Requires an EPW file.</p>
-            <div class="grid grid-cols-2 gap-4">
-                <div><label for="sun-ray-date" class="label text-xs">Date</label><input type="text" id="sun-ray-date" class="w-full mt-1 flatpickr-input" placeholder="Select date..."></div>
-                <div><label for="sun-ray-time" class="label text-xs">Time</label><input type="time" id="sun-ray-time" value="12:00" class="w-full mt-1"></div>
-            </div>`;
-
-        div.appendChild(this.createRangeControl('sun-ray-count', 'Ray Count', 10, 1000, 100, 10));
-        div.appendChild(this.createRangeControl('sun-ray-bounces', 'Max Bounces', 0, 10, 1, 1));
-
-        // Checkbox
-        const toggleDiv = document.createElement('div');
-        toggleDiv.className = 'pt-2';
-        toggleDiv.innerHTML = `
-            <label for="sun-rays-visibility-toggle" class="flex items-center cursor-pointer">
-                <input type="checkbox" id="sun-rays-visibility-toggle" checked>
-                <span class="ml-3 label !text-gray-600 !uppercase-none !font-normal !mb-0">Show Traced Rays</span>
-            </label>`;
-        div.appendChild(toggleDiv);
-
-        // Info Display
-        const infoDiv = document.createElement('div');
-        infoDiv.id = 'sun-ray-info-display';
-        infoDiv.className = 'hidden mt-4 pt-4 border-t border-dashed border-[--grid-color] space-y-2';
-        infoDiv.innerHTML = `
-            <h4 class="font-semibold text-xs uppercase text-[--text-secondary]">Solar Data at Selected Time</h4>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <span class="text-[--text-secondary]">Sun Altitude:</span><span id="sun-altitude-val" class="data-value font-mono text-right">--</span>
-                <span class="text-[--text-secondary]">Sun Azimuth:</span><span id="sun-azimuth-val" class="data-value font-mono text-right">--</span>
-                <span class="text-[--text-secondary]">Direct Normal Irradiance:</span><span id="sun-dni-val" class="data-value font-mono text-right">--</span>
-                <span class="text-[--text-secondary]">Diffuse Horizontal Irradiance:</span><span id="sun-dhi-val" class="data-value font-mono text-right">--</span>
-            </div>`;
-        div.appendChild(infoDiv);
-
-        const btn = document.createElement('button');
-        btn.id = 'trace-sun-rays-btn';
-        btn.className = 'btn btn-primary w-full mt-2';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="mr-2 inline-block"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span>Trace Sun Rays</span>`;
-        div.appendChild(btn);
-
-        return div;
-    }
 
     createOrientationSection(orient) {
         const suffix = orient.id;
@@ -203,15 +155,7 @@ export class AperturePanelUI {
         controlsDiv.appendChild(this.createRollerControls(suffix));
         controlsDiv.appendChild(this.createImportedObjControls(suffix));
 
-        // Sun Ray Tracing Toggle (Per Wall Context)
-        const sunRayDiv = document.createElement('div');
-        sunRayDiv.className = "pt-4 mt-4 border-t border-dashed border-[--grid-color]";
-        sunRayDiv.innerHTML = `
-             <label class="flex items-center cursor-pointer" for="sun-ray-tracing-toggle-${suffix}">
-                <input type="checkbox" id="sun-ray-tracing-toggle-${suffix}">
-                <span class="ml-3 text-sm font-normal text-[--text-primary]">Enable Sun Ray Tracing</span>
-            </label>`;
-        controlsDiv.appendChild(sunRayDiv);
+
 
         container.appendChild(controlsDiv);
         return container;

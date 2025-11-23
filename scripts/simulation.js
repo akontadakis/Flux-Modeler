@@ -12,30 +12,10 @@ let globalParametersCache = {}; // Cache for global parameters that persists acr
 
 const availableModules = [
     // Global panel (not shown in recipes dropdown)
-    { id: 'template-global-sim-params', name: 'Global Simulation Parameters' },
-    // Recipe entries are now effectively mirrored from RecipeRegistry + DOM templates.
-    // This array is kept for legacy button-based UI; the dropdown itself is Registry/DOM-driven.
-    { id: 'template-recipe-illuminance', name: 'Recipe: Illuminance Map' },
-    { id: 'template-recipe-rendering', name: 'Recipe: Photorealistic Rendering' },
-    { id: 'template-recipe-dgp', name: 'Recipe: Daylight Glare Probability' },
-    { id: 'template-recipe-df', name: 'Recipe: Daylight Factor' },
-    { id: 'template-recipe-annual-3ph', name: 'Recipe: Annual Daylight (3-Phase)' },
-    { id: 'template-recipe-sda-ase', name: 'Recipe: sDA & ASE (LM-83)' },
-    { id: 'template-recipe-annual-5ph', name: 'Recipe: Annual Daylight (5-Phase)' },
-    { id: 'template-recipe-imageless-glare', name: 'Recipe: Imageless Annual Glare' },
-    { id: 'template-recipe-spectral-lark', name: 'Recipe: Spectral Analysis (Lark)' },
-    { id: 'template-recipe-en17037', name: 'Recipe: EN 17037 Compliance' },
-    { id: 'template-recipe-en-illuminance', name: 'Recipe: EN 12464-1 Illuminance' },
-    { id: 'template-recipe-en-ugr', name: 'Recipe: EN 12464-1 UGR' },
-    { id: 'template-recipe-lighting-energy', name: 'Recipe: Lighting Energy Analysis' },
-    { id: 'template-recipe-facade-irradiation', name: 'Recipe: Façade Irradiation Analysis' },
-    { id: 'template-recipe-annual-radiation', name: 'Recipe: Annual Solar Radiation' }
+    { id: 'template-global-sim-params', name: 'Global Simulation Parameters' }
 ];
 
-const FOLDER_STRUCTURE = [
-    '01_geometry', '02_materials', '03_views', '04_skies', '05_bsdf',
-    '06_octrees', '07_scripts', '08_results', '09_images', '10_schedules', '11_files', '12_topography'
-];
+
 
 // --- CORE PUBLIC FUNCTIONS ---
 export function setupSimulationSidebar() {
@@ -47,7 +27,7 @@ export function setupSimulationSidebar() {
     initializePanelLogic(simPanel);
 
     availableModules.forEach(module => {
-       // Skip adding "Global" to the recipe dropdown
+        // Skip adding "Global" to the recipe dropdown
         if (module.id === 'template-global-sim-params') return;
 
         const option = document.createElement('option');
@@ -55,7 +35,7 @@ export function setupSimulationSidebar() {
         option.textContent = module.name;
         recipeSelector.appendChild(option);
     });
-    
+
     recipeSelector.addEventListener('change', (e) => {
         const templateId = e.target.value;
         const container = document.getElementById('recipe-parameters-container');
@@ -336,7 +316,7 @@ export async function openRecipePanelByType(templateId) {
     }
 
     // Bring to front
-    if(panel) {
+    if (panel) {
         panel.style.zIndex = getNewZIndex();
         ensureWindowInView(panel);
 
@@ -431,7 +411,7 @@ function _createSimulationPanel(templateId, button) {
     clone.style.left = `calc(50vw - 200px + ${(openWindows % 5) * 20}px)`;
     clone.style.transform = 'none';
 
-   document.getElementById('window-container').appendChild(clone);
+    document.getElementById('window-container').appendChild(clone);
 
     // Add specific listeners for certain panels upon creation
     if (templateId === 'template-global-sim-params') {
@@ -478,10 +458,10 @@ function _populatePanel(panel, panelData) {
                     // Find the display span and update it with the filename.
                     let display = panel.querySelector(`[data-file-display-for="${el.id}"]`);
                     if (!display) {
-                         display = document.createElement('span');
-                         display.className = 'text-sm text-gray-500 ml-4 truncate max-w-[150px]';
-                         display.dataset.fileDisplayFor = el.id;
-                         el.parentElement.insertBefore(display, el.nextSibling);
+                        display = document.createElement('span');
+                        display.className = 'text-sm text-gray-500 ml-4 truncate max-w-[150px]';
+                        display.dataset.fileDisplayFor = el.id;
+                        el.parentElement.insertBefore(display, el.nextSibling);
                     }
                     display.textContent = value.name;
                     display.title = value.name;
@@ -491,7 +471,7 @@ function _populatePanel(panel, panelData) {
             } else {
                 el.value = value;
             }
-            
+
             // Trigger events to ensure UI updates itself (e.g. sliders updating text labels)
             el.dispatchEvent(new Event('change', { bubbles: true }));
             el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -508,7 +488,7 @@ export function uniquifyIds(element, suffix) {
 
         const label = element.querySelector(`label[for="${oldId}"]`);
         if (label) label.setAttribute('for', newId);
-        
+
         const displayFor = element.querySelector(`[data-file-display-for="${oldId}"]`);
         if (displayFor) displayFor.dataset.fileDisplayFor = newId;
     });
@@ -583,7 +563,7 @@ export function initializePanelLogic(panel) {
     if (panel.dataset.templateId && panel.dataset.templateId.startsWith('template-recipe-')) {
         _initQualityPresets(panel);
     } else if (panel.id.includes('recipe-parameters-container')) {
-         _initQualityPresets(panel);
+        _initQualityPresets(panel);
     }
 
     // Initializes interactive sliders and number inputs
@@ -614,11 +594,11 @@ export function initializePanelLogic(panel) {
     const runBtn = panel.querySelector('[data-action="run"]');
     let generatedScriptFiles = {}; // Variable to hold script names between generate and run
 
-   if (generateBtn) {
+    if (generateBtn) {
         generateBtn.addEventListener('click', async () => {
             const result = await programmaticallyGeneratePackage(panel);
             if (result) {
-                 generatedScriptFiles = { sh: result.shFile, bat: result.batFile };
+                generatedScriptFiles = { sh: result.shFile, bat: result.batFile };
             }
         });
     }
@@ -719,37 +699,37 @@ const QUALITY_PRESETS = {
  * @param {HTMLElement} panel The recipe panel element.
  */
 function _initQualityPresets(panel) {
-// The preset selector could be in a floating panel or the main sidebar
-const presetSelect = panel.querySelector('[id^="quality-preset"]');
-if (!presetSelect) return;
+    // The preset selector could be in a floating panel or the main sidebar
+    const presetSelect = panel.querySelector('[id^="quality-preset"]');
+    if (!presetSelect) return;
 
-presetSelect.addEventListener('change', (e) => {
-    const selectedPreset = e.target.value;
-    if (selectedPreset === 'custom' || !QUALITY_PRESETS[selectedPreset]) {
-        // If user selects custom, do nothing. They can edit the global params manually.
-        return;
-    }
-
-    const presetValues = QUALITY_PRESETS[selectedPreset];
-    // The target inputs are ALWAYS the global parameters in the main simulation panel
-    const globalParamsPanel = document.getElementById('panel-simulation-modules');
-    if (!globalParamsPanel) return;
-
-    for (const key in presetValues) {
-        // The IDs in the global panel are like 'ab' & 'ab-num', 'ad' & 'ad-num'.
-        const slider = globalParamsPanel.querySelector(`#${key}`);
-        const numberInput = globalParamsPanel.querySelector(`#${key}-num`);
-        
-        if (slider && numberInput) {
-            const newValue = presetValues[key];
-            slider.value = newValue;
-            numberInput.value = newValue;
-            // Dispatch events to ensure UI consistency (e.g., updating text labels)
-            // and notify other parts of the app of the change.
-            numberInput.dispatchEvent(new Event('input', { bubbles: true })); // For updating the slider
-            slider.dispatchEvent(new Event('input', { bubbles: true })); // For updating the label
+    presetSelect.addEventListener('change', (e) => {
+        const selectedPreset = e.target.value;
+        if (selectedPreset === 'custom' || !QUALITY_PRESETS[selectedPreset]) {
+            // If user selects custom, do nothing. They can edit the global params manually.
+            return;
         }
-    }
-    showAlert(`Global simulation parameters set to '${selectedPreset}' preset.`, 'Preset Applied');
-});
+
+        const presetValues = QUALITY_PRESETS[selectedPreset];
+        // The target inputs are ALWAYS the global parameters in the main simulation panel
+        const globalParamsPanel = document.getElementById('panel-simulation-modules');
+        if (!globalParamsPanel) return;
+
+        for (const key in presetValues) {
+            // The IDs in the global panel are like 'ab' & 'ab-num', 'ad' & 'ad-num'.
+            const slider = globalParamsPanel.querySelector(`#${key}`);
+            const numberInput = globalParamsPanel.querySelector(`#${key}-num`);
+
+            if (slider && numberInput) {
+                const newValue = presetValues[key];
+                slider.value = newValue;
+                numberInput.value = newValue;
+                // Dispatch events to ensure UI consistency (e.g., updating text labels)
+                // and notify other parts of the app of the change.
+                numberInput.dispatchEvent(new Event('input', { bubbles: true })); // For updating the slider
+                slider.dispatchEvent(new Event('input', { bubbles: true })); // For updating the label
+            }
+        }
+        showAlert(`Global simulation parameters set to '${selectedPreset}' preset.`, 'Preset Applied');
+    });
 }

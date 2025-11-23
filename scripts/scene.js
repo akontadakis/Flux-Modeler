@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
-import { roomObject, shadingObject, sensorGridObject, axesObject, northArrowObject, groundObject, wallSelectionGroup, contextObject, furnitureObject, resizeHandlesObject, vegetationObject, daylightingSensorsGroup } from './geometry.js';
+import { roomObject, shadingObject, axesObject, northArrowObject, groundObject, wallSelectionGroup, contextObject, furnitureObject, resizeHandlesObject, vegetationObject } from './geometry.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -18,7 +18,7 @@ import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
  */
 function debounce(func, delay) {
     let timeout;
-    return function(...args) {
+    return function (...args) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(this, args), delay);
     };
@@ -29,7 +29,7 @@ export let composer, fisheyePass;
 // --- MODULE-LEVEL VARIABLES ---
 // Set the default coordinate system to Y-up
 THREE.Object3D.DEFAULT_UP.set(0, 1, 0);
-let renderPass; 
+let renderPass;
 
 // Flag to manage camera update source and prevent feedback loops
 export let isUpdatingCameraFromSliders = false;
@@ -66,7 +66,7 @@ const FisheyeShader = {
     uniforms: {
         'tDiffuse': { value: null }, // The texture of the rendered scene
         'strength': { value: 0.8 },  // How strong the fisheye effect is
-        'aspect':   { value: 1.0 }   // The aspect ratio of the viewport
+        'aspect': { value: 1.0 }   // The aspect ratio of the viewport
     },
     vertexShader: /* glsl */`
         varying vec2 vUv;
@@ -127,7 +127,7 @@ export async function setupScene(container) {
 
     // 3. Renderer Setup
     _setupRenderers(container);
-    
+
     // 4. Post-Processing Composer Setup
     composer = new EffectComposer(renderer);
     renderPass = new RenderPass(scene, perspectiveCamera); // Use perspective as the base
@@ -150,15 +150,15 @@ export async function setupScene(container) {
     // 6. Helpers & Gizmos Setup
     _setupHelpersAndGizmos();
 
-    // 7. Daylighting Sensor Group Setup
+
 
     // 8. Clipping Plane Setup
     horizontalClipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
     verticalClipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
 
-   // 9. Add Geometry Groups to Scene
+    // 9. Add Geometry Groups to Scene
     importedModelObject = new THREE.Group();
-    scene.add(roomObject, shadingObject, sensorGridObject, axesObject, northArrowObject, groundObject, daylightingSensorsGroup, wallSelectionGroup, furnitureObject, resizeHandlesObject, importedModelObject, contextObject, vegetationObject);
+    scene.add(roomObject, shadingObject, axesObject, northArrowObject, groundObject, wallSelectionGroup, furnitureObject, resizeHandlesObject, importedModelObject, contextObject, vegetationObject);
 
 
     // 10. Signal that the scene is initialized and ready for interaction.
@@ -181,7 +181,7 @@ export function animate() {
         renderer.setViewport(main.left, main.bottom, main.width, main.height);
         composer.render(); // Use composer for main view to keep effects
         labelRenderer.render(scene, activeCamera);
-        if(controls.enabled) controls.update();
+        if (controls.enabled) controls.update();
 
         // Render top viewport
         const top = viewports.top;
@@ -316,7 +316,7 @@ export function updateViewpointFromUI(params) {
     if (!viewpointCamera || !viewCamHelper) return;
 
     const { W, L, vpx, vpy, vpz, vdx, vdy, vdz, fov, dist } = params;
-    
+
     const pos = new THREE.Vector3(vpx, vpy, vpz);
     const localDir = new THREE.Vector3(vdx, vdy, vdz);
 
@@ -327,7 +327,7 @@ export function updateViewpointFromUI(params) {
 
     // Convert UI's corner-based coordinates to the scene's center-based world coordinates
     const worldPos = new THREE.Vector3(pos.x - W / 2, pos.y, pos.z - L / 2);
-    
+
     // Rotate the local direction vector by the room's current rotation to get the world direction
     const localDirNormalized = localDir.clone().normalize();
 
@@ -387,7 +387,7 @@ function _setupCameras(container) {
     // Orthographic Camera (for 2D views like Top, Front, etc.)
     orthoCamera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 0.1, 1000);
     orthoCamera.position.copy(initialCameraPosition);
-    
+
     // Viewpoint Camera (for first-person view and Radiance renderings)
     viewpointCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 50);
 
@@ -574,7 +574,7 @@ export function toggleFirstPersonView(viewType) {
     isFirstPersonView = !isFirstPersonView;
     const isParallel = viewType === 'l';
 
-  controls.enabled = !isFirstPersonView;
+    controls.enabled = !isFirstPersonView;
 
     if (isFirstPersonView) {
         preFpvCamera = activeCamera; // Store the camera that was active before FPV
@@ -599,7 +599,7 @@ export function toggleFirstPersonView(viewType) {
 export function captureSceneSnapshot(width = 128) {
     // Force a render of the current frame to ensure it's up-to-date
     composer.render();
-    
+
     const mainCanvas = renderer.domElement;
     const thumbnailCanvas = document.createElement('canvas');
     const aspect = mainCanvas.height / mainCanvas.width;
