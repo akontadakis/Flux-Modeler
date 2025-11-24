@@ -5,6 +5,7 @@ import { resultsManager } from './resultsManager.js';
 import { validateEnergyPlusRunRequest, formatIssuesSummary } from './energyplusValidation.js';
 import { openSchedulesManagerPanel } from './energyplusSchedules.js';
 import { openMaterialsManagerPanel, openConstructionsManagerPanel } from './energyplusMaterials.js';
+import { openThermostatsPanel } from './energyplusThermostats.js';
 /* EnergyPlus contextual help disabled */
 
 let dom;
@@ -102,7 +103,7 @@ function initializeEnergyPlusSidebar() {
                         'open-constructions': openConstructionsManagerPanel,
                         'open-schedules': openSchedulesManagerPanel,
                         'open-zone-loads': openZoneLoadsManagerPanel,
-                        'open-ideal-loads': openIdealLoadsManagerPanel,
+                        'open-ideal-loads': openThermostatsPanel,
                         'open-daylighting': openDaylightingManagerPanel,
                         'open-outputs': openOutputsManagerPanel,
                         'open-weather-location': openWeatherLocationManagerPanel,
@@ -153,18 +154,7 @@ function initializeEnergyPlusSidebar() {
         populateRecipeList();
     }
 
-    // --- 3. Materials & Constructions Panel ---
-    const matBtn = document.getElementById('btn-open-materials-panel');
-    if (matBtn) {
-        matBtn.addEventListener('click', () => {
-            const panel = document.getElementById('panel-materials-constructions');
-            if (panel && !panel.classList.contains('hidden')) {
-                panel.classList.add('hidden');
-            } else {
-                openMaterialsManagerPanel();
-            }
-        });
-    }
+
 }
 
 /**
@@ -1027,7 +1017,9 @@ function renderDiagnostics(container, diagnostics) {
                 <div class="mt-1">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-semibold text-[--text-secondary]">Thermostats & IdealLoads</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="ideal-loads">Thermostats & IdealLoads</button>
+                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="ideal-loads">
+                            <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="iconify iconify--emojione-monotone" style="fill: currentColor;"><path d="M30.381 14.757c-11.967 0-21.668 9.681-21.668 21.621C8.713 48.32 18.414 58 30.381 58s21.666-9.68 21.666-21.622c0-11.94-9.699-21.621-21.666-21.621m1.286 18.828a1.285 1.285 0 0 1-2.572 0v-14.3a1.287 1.287 0 0 1 2.572 0z"/><path d="M59.912 25.526a30.9 30.9 0 0 0-10.499-13.738A29.8 29.8 0 0 0 33.02 6.027a29.6 29.6 0 0 0-16.88 4.461c-5.012 3.129-9.07 7.78-11.504 13.226-2.434 5.396-3.205 11.557-2.216 17.44.661 4.018 2.194 7.893 4.418 11.331h2.968c-2.12-3.169-3.578-6.778-4.218-10.503-.86-4.94-.328-10.129 1.512-14.709a26.3 26.3 0 0 1 9.055-11.597c4.039-2.913 8.917-4.558 13.816-4.692a24.46 24.46 0 0 1 13.958 3.876c4.145 2.662 7.416 6.594 9.311 11.018 1.957 4.518 2.466 9.543 1.594 14.291a24.07 24.07 0 0 1-6.32 12.315h9.299a31.3 31.3 0 0 0 3.646-9.815c1.067-5.696.558-11.694-1.547-17.143"/></svg>
+                        </button>
                     </div>
                     <div class="text-xs">
                         ${renderIssueList(grouped.thermostats)}
@@ -1113,7 +1105,7 @@ function renderDiagnostics(container, diagnostics) {
                 } else if (nav === 'zone-loads') {
                     openZoneLoadsManagerPanel();
                 } else if (nav === 'ideal-loads') {
-                    openIdealLoadsManagerPanel();
+                    openThermostatsPanel();
                 } else if (nav === 'weather') {
                     openWeatherLocationManagerPanel();
                 } else if (nav === 'sim-control') {
@@ -6465,10 +6457,9 @@ export {
     openConstructionsManagerPanel,
     openSchedulesManagerPanel,
     openZoneLoadsManagerPanel,
-    openIdealLoadsManagerPanel,
+    openThermostatsPanel,
     openDaylightingManagerPanel,
     openOutputsManagerPanel,
-    openHvacSizingManagerPanel,
     openOutdoorAirManagerPanel,
     openShadingManagerPanel
 };

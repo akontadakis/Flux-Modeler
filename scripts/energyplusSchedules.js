@@ -16,13 +16,27 @@ let dom;
 export function openSchedulesManagerPanel() {
     dom = getDom();
     const panelId = 'panel-energyplus-schedules';
+    const btnId = 'toggle-panel-schedules-btn';
+    const btn = document.getElementById(btnId);
+
     let panel = document.getElementById(panelId);
+
+    // If panel exists and is visible, toggle it closed
+    if (panel && !panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        if (btn) btn.classList.remove('active');
+        return;
+    }
+
+    // Otherwise, open the panel
     if (!panel) {
         panel = createSchedulesManagerPanel();
         const container = document.getElementById('window-container');
         container.appendChild(panel);
     }
+
     panel.classList.remove('hidden');
+    if (btn) btn.classList.add('active');
 
     // Bring to front
     const allPanels = document.querySelectorAll('.floating-window');

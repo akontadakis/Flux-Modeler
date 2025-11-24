@@ -12,13 +12,27 @@ let dom;
 export function openMaterialsManagerPanel() {
     dom = getDom();
     const panelId = 'panel-materials-constructions';
+    const btnId = 'btn-open-materials-panel';
+    const btn = document.getElementById(btnId);
+
     let panel = document.getElementById(panelId);
+
+    // If panel exists and is visible, toggle it closed
+    if (panel && !panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        if (btn) btn.classList.remove('active');
+        return;
+    }
+
+    // Otherwise, open the panel
     if (!panel) {
         panel = createMaterialsManagerPanel();
         const container = document.getElementById('window-container');
         container.appendChild(panel);
     }
+
     panel.classList.remove('hidden');
+    if (btn) btn.classList.add('active');
 
     // Bring to front
     const allPanels = document.querySelectorAll('.floating-window');
@@ -333,35 +347,81 @@ function renderMaterialEditor(container, data, isNew, index, panel) {
     }
 }
 
+const TOOLTIPS = {
+    // Material
+    roughness: "This alpha field defines the relative roughness of a particular material layer. This parameter only influences the convection coefficients, more specifically the exterior convection coefficient.",
+    thickness: "This field characterizes the thickness of the material layer in meters. This should be the dimension of the layer in the direction perpendicular to the main path of heat conduction. This value must be a positive. Modeling layers thinner (less) than 0.003 m is not recommended.",
+    conductivity: "This field is used to enter the thermal conductivity of the material layer. Units for this parameter are W/(m-K). Thermal conductivity must be greater than zero.",
+    density: "This field is used to enter the density of the material layer in units of kg/m³. Density must be a positive quantity.",
+    specificHeat: "This field represents the specific heat of the material layer in units of J/(kg-K). Only values of specific heat of 100 or larger are allowed.",
+    thermalAbsorptance: "The thermal absorptance field represents the fraction of incident long wavelength (>2.5 microns) radiation that is absorbed by the material. Values for this field must be between 0.0 and 1.0 (with 1.0 representing “black body” conditions). The default value for this field is 0.9.",
+    solarAbsorptance: "The solar absorptance field represents the fraction of incident solar radiation that is absorbed by the material. Solar radiation (0.3 to 2.537 μm) includes the visible spectrum as well as infrared and ultraviolet wavelengths. Values for this field must be between 0.0 and 1.0. The default value for this field is 0.7.",
+    visibleAbsorptance: "The visible absorptance field represents the fraction of incident visible wavelength radiation that is absorbed by the material. Visible wavelength radiation (0.37 to 0.78 μm weighted by photopic response) is slightly different than solar radiation. Values for this field must be between 0.0 and 1.0. The default value for this field is 0.7.",
+
+    // Material:NoMass & AirGap
+    thermalResistance: "This field is used to enter the thermal resistance (R-value) of the material layer. Units for this parameter are (m²-K)/W. Thermal resistance must be greater than zero.",
+
+    // WindowMaterial:Glazing
+    opticalDataType: "Valid values for this field are SpectralAverage, Spectral, SpectralAndAngle, and BSDF. If SpectralAverage, values for solar transmittance and reflectance are assumed to be averaged over the solar spectrum.",
+    solarTransmittance: "Transmittance at normal incidence averaged over the solar spectrum. Used only when Optical Data Type = SpectralAverage.",
+    frontSolarReflectance: "Front-side reflectance at normal incidence averaged over the solar spectrum. Used only when Optical Data Type = SpectralAverage.",
+    backSolarReflectance: "Back-side reflectance at normal incidence averaged over the solar spectrum. Used only when Optical Data Type = SpectralAverage.",
+    visibleTransmittance: "Transmittance at normal incidence averaged over the solar spectrum and weighted by the response of the human eye. Used only when Optical Data Type = SpectralAverage.",
+    frontVisibleReflectance: "Front-side reflectance at normal incidence averaged over the solar spectrum and weighted by the response of the human eye. Used only when Optical Data Type = SpectralAverage.",
+    backVisibleReflectance: "Back-side reflectance at normal incidence averaged over the solar spectrum and weighted by the response of the human eye. Used only when Optical Data Type = SpectralAverage.",
+    infraredTransmittance: "Long-wave transmittance at normal incidence.",
+    frontEmissivity: "Front-side long-wave emissivity.",
+    backEmissivity: "Back-side long-wave emissivity.",
+    dirtCorrectionFactor: "This is a factor that corrects for the presence of dirt on the glass. The program multiplies the fields “Solar Transmittance at Normal Incidence” and “Visible Transmittance at Normal Incidence” by this factor if the material is used as the outer glass layer of an exterior window or glass door.",
+
+    // WindowMaterial:Gas
+    gasType: "The type of gas. The choices are Air, Argon, Krypton, or Xenon. If Gas Type = Custom you can use Conductivity Coefficient A, etc. to specify the properties of a different type of gas.",
+
+    // WindowMaterial:SimpleGlazingSystem
+    uFactor: "This field describes the value for window system U-Factor, or overall heat transfer coefficient. Units are in W/m²-K. This is the rated (NFRC) value for U-factor under winter heating conditions.",
+    solarHeatGainCoeff: "This field describes the value for SHGC, or solar heat gain coefficient. There are no units. This is the rated (NFRC) value for SHGC under summer cooling conditions.",
+    // visibleTransmittance reused from Glazing
+};
+
 function getMaterialFields(type, data) {
-    // Helper for sliders
-    const slider = (label, field, min, max, step, val) => `
-        <div>
-            <label class="label text-xs">${label}</label>
-            <div class="flex items-center space-x-2 mt-1">
-                <input type="range" min="${min}" max="${max}" step="${step}" class="w-full" data-field="${field}" value="${val}">
-                <span class="data-value font-mono w-12 text-right text-xs" data-display="${field}">${val}</span>
+    const renderField = (label, field, inputType, optionsOrStep, val, unit = '', min = '', max = '') => {
+        const tooltip = TOOLTIPS[field];
+        const infoIcon = tooltip ? `
+            <span class="info-icon">i
+                <span class="info-popover">${tooltip}</span>
+            </span>
+        ` : '';
+
+        let inputHtml = '';
+        if (inputType === 'select') {
+            const options = optionsOrStep;
+            inputHtml = `
+                <select class="w-full mt-1" data-field="${field}">
+                    ${options.map(opt => `<option value="${opt}"${opt === val ? ' selected' : ''}>${opt}</option>`).join('')}
+                </select>
+            `;
+        } else if (inputType === 'range') {
+            const step = optionsOrStep;
+            inputHtml = `
+                <div class="flex items-center space-x-2 mt-1">
+                    <input type="range" min="${min}" max="${max}" step="${step}" class="w-full" data-field="${field}" value="${val}">
+                    <span class="data-value font-mono w-12 text-right text-xs" data-display="${field}">${val}</span>
+                </div>
+            `;
+        } else { // number
+            const step = optionsOrStep;
+            inputHtml = `
+                <input type="number" step="${step}" class="w-full mt-1" data-field="${field}" value="${val !== undefined ? val : ''}">
+            `;
+        }
+
+        return `
+            <div>
+                <label class="label text-xs">${label}${unit ? ` (${unit})` : ''}${infoIcon}</label>
+                ${inputHtml}
             </div>
-        </div>
-    `;
-
-    // Helper for number inputs
-    const numInput = (label, field, step, val, unit = '') => `
-        <div>
-            <label class="label text-xs">${label}${unit ? ` (${unit})` : ''}</label>
-            <input type="number" step="${step}" class="w-full mt-1" data-field="${field}" value="${val !== undefined ? val : ''}">
-        </div>
-    `;
-
-    // Helper for dropdowns
-    const dropdown = (label, field, options, selected) => `
-        <div>
-            <label class="label text-xs">${label}</label>
-            <select class="w-full mt-1" data-field="${field}">
-                ${options.map(opt => `<option value="${opt}"${opt === selected ? ' selected' : ''}>${opt}</option>`).join('')}
-            </select>
-        </div>
-    `;
+        `;
+    };
 
     let html = '';
 
@@ -369,95 +429,95 @@ function getMaterialFields(type, data) {
         const roughnessOpts = ['VeryRough', 'Rough', 'MediumRough', 'MediumSmooth', 'Smooth', 'VerySmooth'];
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${dropdown('Roughness', 'roughness', roughnessOpts, data.roughness || 'MediumRough')}
-                ${numInput('Thickness', 'thickness', '0.001', data.thickness, 'm')}
+                ${renderField('Roughness', 'roughness', 'select', roughnessOpts, data.roughness || 'MediumRough')}
+                ${renderField('Thickness', 'thickness', 'number', '0.001', data.thickness, 'm')}
             </div>
             <div class="grid grid-cols-2 gap-2">
-                ${slider('Conductivity (W/m-K)', 'conductivity', '0.01', '5.0', '0.01', data.conductivity ?? 0.1)}
-                ${numInput('Density', 'density', '1', data.density, 'kg/m³')}
+                ${renderField('Conductivity', 'conductivity', 'range', '0.01', data.conductivity ?? 0.1, 'W/m-K', '0.01', '5.0')}
+                ${renderField('Density', 'density', 'number', '1', data.density, 'kg/m³')}
             </div>
             <div class="grid grid-cols-2 gap-2">
-                ${numInput('Specific Heat', 'specificHeat', '1', data.specificHeat, 'J/kg-K')}
+                ${renderField('Specific Heat', 'specificHeat', 'number', '1', data.specificHeat, 'J/kg-K')}
             </div>
             <div class="grid grid-cols-3 gap-2">
-                ${slider('Thermal Abs', 'thermalAbsorptance', '0', '1', '0.01', data.thermalAbsorptance ?? 0.9)}
-                ${slider('Solar Abs', 'solarAbsorptance', '0', '1', '0.01', data.solarAbsorptance ?? 0.7)}
-                ${slider('Visible Abs', 'visibleAbsorptance', '0', '1', '0.01', data.visibleAbsorptance ?? 0.7)}
+                ${renderField('Thermal Abs', 'thermalAbsorptance', 'range', '0.01', data.thermalAbsorptance ?? 0.9, '', '0', '1')}
+                ${renderField('Solar Abs', 'solarAbsorptance', 'range', '0.01', data.solarAbsorptance ?? 0.7, '', '0', '1')}
+                ${renderField('Visible Abs', 'visibleAbsorptance', 'range', '0.01', data.visibleAbsorptance ?? 0.7, '', '0', '1')}
             </div>
         `;
     } else if (type === 'Material:NoMass') {
         const roughnessOpts = ['VeryRough', 'Rough', 'MediumRough', 'MediumSmooth', 'Smooth', 'VerySmooth'];
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${dropdown('Roughness', 'roughness', roughnessOpts, data.roughness || 'MediumRough')}
-                ${numInput('Thermal Resistance', 'thermalResistance', '0.01', data.thermalResistance, 'm²K/W')}
+                ${renderField('Roughness', 'roughness', 'select', roughnessOpts, data.roughness || 'MediumRough')}
+                ${renderField('Thermal Resistance', 'thermalResistance', 'number', '0.01', data.thermalResistance, 'm²K/W')}
             </div>
             <div class="grid grid-cols-3 gap-2">
-                ${slider('Thermal Abs', 'thermalAbsorptance', '0', '1', '0.01', data.thermalAbsorptance ?? 0.9)}
-                ${slider('Solar Abs', 'solarAbsorptance', '0', '1', '0.01', data.solarAbsorptance ?? 0.7)}
-                ${slider('Visible Abs', 'visibleAbsorptance', '0', '1', '0.01', data.visibleAbsorptance ?? 0.7)}
+                ${renderField('Thermal Abs', 'thermalAbsorptance', 'range', '0.01', data.thermalAbsorptance ?? 0.9, '', '0', '1')}
+                ${renderField('Solar Abs', 'solarAbsorptance', 'range', '0.01', data.solarAbsorptance ?? 0.7, '', '0', '1')}
+                ${renderField('Visible Abs', 'visibleAbsorptance', 'range', '0.01', data.visibleAbsorptance ?? 0.7, '', '0', '1')}
             </div>
         `;
     } else if (type === 'Material:AirGap') {
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${numInput('Thermal Resistance', 'thermalResistance', '0.01', data.thermalResistance, 'm²K/W')}
+                ${renderField('Thermal Resistance', 'thermalResistance', 'number', '0.01', data.thermalResistance, 'm²K/W')}
             </div>
         `;
     } else if (type === 'WindowMaterial:Glazing') {
         const opticalTypes = ['SpectralAverage', 'Spectral', 'SpectralAndAngle', 'BSDF'];
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${dropdown('Optical Data Type', 'opticalDataType', opticalTypes, data.opticalDataType || 'SpectralAverage')}
-                ${numInput('Thickness', 'thickness', '0.001', data.thickness, 'm')}
+                ${renderField('Optical Data Type', 'opticalDataType', 'select', opticalTypes, data.opticalDataType || 'SpectralAverage')}
+                ${renderField('Thickness', 'thickness', 'number', '0.001', data.thickness, 'm')}
             </div>
             <div class="space-y-2 border border-[--grid-color] p-2 rounded">
                 <h4 class="text-xs font-semibold text-[--text-secondary]">Solar Transmittance & Reflectance</h4>
                 <div class="grid grid-cols-3 gap-2">
-                    ${numInput('Solar Trans', 'solarTransmittance', '0.01', data.solarTransmittance)}
-                    ${numInput('Front Refl', 'frontSolarReflectance', '0.01', data.frontSolarReflectance)}
-                    ${numInput('Back Refl', 'backSolarReflectance', '0.01', data.backSolarReflectance)}
+                    ${renderField('Solar Trans', 'solarTransmittance', 'number', '0.01', data.solarTransmittance)}
+                    ${renderField('Front Refl', 'frontSolarReflectance', 'number', '0.01', data.frontSolarReflectance)}
+                    ${renderField('Back Refl', 'backSolarReflectance', 'number', '0.01', data.backSolarReflectance)}
                 </div>
             </div>
             <div class="space-y-2 border border-[--grid-color] p-2 rounded">
                 <h4 class="text-xs font-semibold text-[--text-secondary]">Visible Transmittance & Reflectance</h4>
                 <div class="grid grid-cols-3 gap-2">
-                    ${numInput('Vis Trans', 'visibleTransmittance', '0.01', data.visibleTransmittance)}
-                    ${numInput('Front Refl', 'frontVisibleReflectance', '0.01', data.frontVisibleReflectance)}
-                    ${numInput('Back Refl', 'backVisibleReflectance', '0.01', data.backVisibleReflectance)}
+                    ${renderField('Vis Trans', 'visibleTransmittance', 'number', '0.01', data.visibleTransmittance)}
+                    ${renderField('Front Refl', 'frontVisibleReflectance', 'number', '0.01', data.frontVisibleReflectance)}
+                    ${renderField('Back Refl', 'backVisibleReflectance', 'number', '0.01', data.backVisibleReflectance)}
                 </div>
             </div>
             <div class="space-y-2 border border-[--grid-color] p-2 rounded">
                 <h4 class="text-xs font-semibold text-[--text-secondary]">Infrared & Thermal</h4>
                 <div class="grid grid-cols-2 gap-2">
-                    ${numInput('IR Trans', 'infraredTransmittance', '0.01', data.infraredTransmittance)}
-                    ${numInput('Conductivity', 'conductivity', '0.01', data.conductivity, 'W/m-K')}
+                    ${renderField('IR Trans', 'infraredTransmittance', 'number', '0.01', data.infraredTransmittance)}
+                    ${renderField('Conductivity', 'conductivity', 'number', '0.01', data.conductivity, 'W/m-K')}
                 </div>
                 <div class="grid grid-cols-2 gap-2">
-                    ${numInput('Front Emiss', 'frontEmissivity', '0.01', data.frontEmissivity)}
-                    ${numInput('Back Emiss', 'backEmissivity', '0.01', data.backEmissivity)}
+                    ${renderField('Front Emiss', 'frontEmissivity', 'number', '0.01', data.frontEmissivity)}
+                    ${renderField('Back Emiss', 'backEmissivity', 'number', '0.01', data.backEmissivity)}
                 </div>
             </div>
             <div class="mt-2">
-                ${numInput('Dirt Correction Factor', 'dirtCorrectionFactor', '0.01', data.dirtCorrectionFactor ?? 1.0)}
+                ${renderField('Dirt Correction Factor', 'dirtCorrectionFactor', 'number', '0.01', data.dirtCorrectionFactor ?? 1.0)}
             </div>
         `;
     } else if (type === 'WindowMaterial:Gas') {
         const gasTypes = ['Air', 'Argon', 'Krypton', 'Xenon', 'Custom'];
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${dropdown('Gas Type', 'gasType', gasTypes, data.gasType || 'Air')}
-                ${numInput('Thickness', 'thickness', '0.001', data.thickness, 'm')}
+                ${renderField('Gas Type', 'gasType', 'select', gasTypes, data.gasType || 'Air')}
+                ${renderField('Thickness', 'thickness', 'number', '0.001', data.thickness, 'm')}
             </div>
         `;
     } else if (type === 'WindowMaterial:SimpleGlazingSystem') {
         html += `
             <div class="grid grid-cols-2 gap-2">
-                ${numInput('U-Factor', 'uFactor', '0.01', data.uFactor, 'W/m²K')}
+                ${renderField('U-Factor', 'uFactor', 'number', '0.01', data.uFactor, 'W/m²K')}
             </div>
             <div class="grid grid-cols-2 gap-2">
-                ${slider('SHGC', 'solarHeatGainCoeff', '0', '1', '0.01', data.solarHeatGainCoeff ?? 0.7)}
-                ${slider('Visible Trans', 'visibleTransmittance', '0', '1', '0.01', data.visibleTransmittance ?? 0.7)}
+                ${renderField('SHGC', 'solarHeatGainCoeff', 'range', '0.01', data.solarHeatGainCoeff ?? 0.7, '', '0', '1')}
+                ${renderField('Visible Trans', 'visibleTransmittance', 'range', '0.01', data.visibleTransmittance ?? 0.7, '', '0', '1')}
             </div>
         `;
     }

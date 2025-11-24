@@ -1,11 +1,21 @@
 export class AperturePanelUI {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
+        this.currentCategory = 'general'; // Default category
+
+        this.categories = [
+            { id: 'general', label: 'General Settings' },
+            { id: 'north', label: 'North Facade' },
+            { id: 'south', label: 'South Facade' },
+            { id: 'east', label: 'East Facade' },
+            { id: 'west', label: 'West Facade' }
+        ];
+
         this.orientations = [
-            { id: 'n', label: 'North' },
-            { id: 's', label: 'South' },
-            { id: 'e', label: 'East' },
-            { id: 'w', label: 'West' }
+            { id: 'n', label: 'North', categoryId: 'north' },
+            { id: 's', label: 'South', categoryId: 'south' },
+            { id: 'e', label: 'East', categoryId: 'east' },
+            { id: 'w', label: 'West', categoryId: 'west' }
         ];
 
         this.shadingTypes = [
@@ -22,27 +32,69 @@ export class AperturePanelUI {
         if (!this.container) return;
         this.container.innerHTML = '';
 
+        // Add class for styling if needed, though we reuse generic classes
+        this.container.classList.add('resizable-panel');
+        // Set initial size if not already set (though CSS/ui.js usually handles this)
+        this.container.style.width = '800px';
+        this.container.style.height = '600px';
+
         const header = this.createHeader("Apertures & Shading");
         this.container.appendChild(header);
 
-        const content = document.createElement('div');
-        content.className = 'window-content space-y-5';
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'window-content';
+        contentWrapper.style.display = 'flex';
+        contentWrapper.style.flexDirection = 'column';
+        contentWrapper.style.height = '100%';
+        contentWrapper.style.overflow = 'hidden';
 
-        // 1. Wall Selection
-        content.appendChild(this.createWallSelectionSection());
+        // Inner container for Sidebar + Content
+        const innerContainer = document.createElement('div');
+        innerContainer.style.display = 'flex';
+        innerContainer.style.flex = '1';
+        innerContainer.style.overflow = 'hidden';
 
+        // 1. Left Sidebar
+        const sidebar = document.createElement('div');
+        sidebar.style.width = '200px';
+        sidebar.style.borderRight = '1px solid var(--grid-color)';
+        sidebar.style.display = 'flex';
+        sidebar.style.flexDirection = 'column';
+        sidebar.innerHTML = `
+            <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
+                <span class="label">Configuration</span>
+            </div>
+            <div id="aperture-category-list" class="scrollable-panel-inner" style="flex: 1; overflow-y: auto;">
+                <!-- Categories injected here -->
+            </div>
+        `;
+        innerContainer.appendChild(sidebar);
 
+        // 2. Right Content Area
+        const contentArea = document.createElement('div');
+        contentArea.id = 'aperture-category-editor';
+        contentArea.style.flex = '1';
+        contentArea.style.padding = '1rem';
+        contentArea.style.overflowY = 'auto';
+        contentArea.style.display = 'flex';
+        contentArea.style.flexDirection = 'column';
+        contentArea.style.gap = '1rem';
+        innerContainer.appendChild(contentArea);
 
-        // 3. Orientation Controls (N, S, E, W)
-        this.orientations.forEach(orient => {
-            content.appendChild(this.createOrientationSection(orient));
-        });
+        contentWrapper.appendChild(innerContainer);
 
-        // 4. Frame Controls (Global)
-        content.appendChild(this.createFrameControls());
+        // Append Resize Handles to contentWrapper (or container, but container is better for absolute pos)
+        this.appendResizeHandles(contentWrapper);
 
-        this.container.appendChild(content);
-        this.appendResizeHandles();
+        this.container.appendChild(contentWrapper);
+        this.appendResizeHandles(this.container); // Handles need to be direct children of the floating window
+
+        // Render Categories and Content
+        this.renderCategoryList();
+        this.renderAllSections(contentArea);
+
+        // Initialize with default category
+        this.selectCategory(this.currentCategory);
     }
 
     createHeader(title) {
@@ -56,6 +108,82 @@ export class AperturePanelUI {
                 <div class="window-icon-close"></div>
             </div>`;
         return div;
+    }
+
+    renderCategoryList() {
+        const listContainer = this.container.querySelector('#aperture-category-list');
+        if (!listContainer) return;
+
+        listContainer.innerHTML = '';
+
+        this.categories.forEach(cat => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.dataset.id = cat.id; // For easy selection update
+            item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+            item.innerHTML = `<div class="text-xs">${cat.label}</div>`;
+
+            item.addEventListener('click', () => {
+                this.selectCategory(cat.id);
+            });
+
+            item.addEventListener('mouseenter', () => {
+                if (cat.id !== this.currentCategory) {
+                    item.style.backgroundColor = 'var(--hover-bg)';
+                }
+            });
+
+            item.addEventListener('mouseleave', () => {
+                if (cat.id !== this.currentCategory) {
+                    item.style.backgroundColor = '';
+                }
+            });
+
+            listContainer.appendChild(item);
+        });
+    }
+
+    renderAllSections(parentContainer) {
+        // 1. General Section (Wall Selection + Frame Controls)
+        const generalDiv = document.createElement('div');
+        generalDiv.id = 'aperture-section-general';
+        generalDiv.className = 'aperture-section hidden space-y-5';
+        generalDiv.appendChild(this.createWallSelectionSection());
+        generalDiv.appendChild(this.createFrameControls());
+        parentContainer.appendChild(generalDiv);
+
+        // 2. Orientation Sections
+        this.orientations.forEach(orient => {
+            const section = this.createOrientationSection(orient);
+            section.id = `aperture-section-${orient.categoryId}`; // e.g., aperture-section-north
+            section.className = 'aperture-section hidden space-y-5'; // Initially hidden
+            parentContainer.appendChild(section);
+        });
+    }
+
+    selectCategory(categoryId) {
+        this.currentCategory = categoryId;
+
+        // Update Sidebar Styling
+        const listItems = this.container.querySelectorAll('#aperture-category-list .list-item');
+        listItems.forEach(item => {
+            if (item.dataset.id === categoryId) {
+                item.style.backgroundColor = 'var(--accent-color)';
+                item.style.color = 'white';
+            } else {
+                item.style.backgroundColor = '';
+                item.style.color = '';
+            }
+        });
+
+        // Show/Hide Content Sections
+        const sections = this.container.querySelectorAll('.aperture-section');
+        sections.forEach(sec => sec.classList.add('hidden'));
+
+        const activeSection = this.container.querySelector(`#aperture-section-${categoryId}`);
+        if (activeSection) {
+            activeSection.classList.remove('hidden');
+        }
     }
 
     createWallSelectionSection() {
@@ -77,13 +205,22 @@ export class AperturePanelUI {
         return div;
     }
 
-
-
     createOrientationSection(orient) {
         const suffix = orient.id;
         const container = document.createElement('div');
-        container.id = `aperture-controls-${suffix}`;
-        container.className = 'aperture-controls hidden space-y-5 pt-4 border-t border-[--grid-color]';
+        // NOTE: We do NOT set an ID here that conflicts with the section wrapper ID.
+        // The wrapper handles visibility. This is just the content.
+        // However, the original code used `aperture-controls-${suffix}` for visibility toggling.
+        // We will keep that ID on a wrapper inside this section if needed, OR just put the content directly.
+        // Let's keep the ID `aperture-controls-${suffix}` on the inner container so existing logic *could* find it,
+        // but we will override the visibility logic to use the parent section.
+        // Actually, existing logic uses `aperture-controls-${dir}` to toggle visibility.
+        // We should probably allow that logic to continue working, OR update it.
+        // Since we are refactoring `ui.js` too, we can change how it works.
+        // Let's make this container the one that holds the controls.
+
+        container.id = `aperture-controls-${suffix}`; // Kept for reference/compatibility if needed
+        container.className = 'space-y-5'; // Removed 'hidden' and border-t, handled by parent section
 
         container.innerHTML = `<h3 class="font-semibold text-sm uppercase">${orient.label} Wall Apertures</h3>`;
 
@@ -154,8 +291,6 @@ export class AperturePanelUI {
         controlsDiv.appendChild(this.createLouverControls(suffix));
         controlsDiv.appendChild(this.createRollerControls(suffix));
         controlsDiv.appendChild(this.createImportedObjControls(suffix));
-
-
 
         container.appendChild(controlsDiv);
         return container;
@@ -338,12 +473,12 @@ export class AperturePanelUI {
         return wrapper;
     }
 
-    appendResizeHandles() {
+    appendResizeHandles(targetElement) {
         const positions = ['top', 'right', 'bottom', 'left', 'top-left', 'top-right', 'bottom-left', 'bottom-right'];
         positions.forEach(pos => {
             const div = document.createElement('div');
             div.className = pos.includes('-') ? `resize-handle-corner ${pos}` : `resize-handle-edge ${pos}`;
-            this.container.appendChild(div);
+            targetElement.appendChild(div);
         });
     }
 }

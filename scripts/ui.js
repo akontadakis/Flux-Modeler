@@ -20,14 +20,15 @@ import {
     openMaterialsManagerPanel,
     openConstructionsManagerPanel,
     openZoneLoadsManagerPanel,
-    openIdealLoadsManagerPanel,
+    openThermostatsPanel,
     openDaylightingManagerPanel,
     openOutputsManagerPanel,
-    openHvacSizingManagerPanel,
     openOutdoorAirManagerPanel,
     openShadingManagerPanel
 } from './energyplusSidebar.js';
 import { openSchedulesManagerPanel } from './energyplusSchedules.js';
+import { openProjectSetupPanel } from './energyplusProjectSetup.js';
+import { openGeometryPanel, initializeGeometryPanel } from './geometryPanel.js';
 
 // --- SHORTCUTS ---
 // Centralized object to define all keyboard shortcut actions
@@ -47,8 +48,8 @@ const shortcutActions = {
     'viewRight': () => setCameraView('right'),
 
     // Panel toggles
-    'toggleProjectPanel': () => togglePanelVisibility('panel-project', 'toggle-panel-project-btn'),
-    'toggleDimensionsPanel': () => togglePanelVisibility('panel-dimensions', 'toggle-panel-dimensions-btn'),
+    'toggleProjectPanel': () => openProjectSetupPanel(),
+    'toggleDimensionsPanel': () => openGeometryPanel(),
     'toggleAperturePanel': () => togglePanelVisibility('panel-aperture', 'toggle-panel-aperture-btn'),
 
     'toggleMaterialsPanel': () => togglePanelVisibility('panel-materials-constructions', 'toggle-panel-materials-constructions-btn'),
@@ -902,7 +903,9 @@ function setupHeliosPanel() {
 export async function setupEventListeners() {
     // --- 1. Initialize Dynamic UI Components ---
     // We must render the Aperture Panel first so its HTML elements exist in the DOM.
-    const aperturePanel = new AperturePanelUI('panel-aperture');
+    // --- 1. Initialize Dynamic UI Components ---
+    // We must render the Aperture Panel first so its HTML elements exist in the DOM.
+    aperturePanel = new AperturePanelUI('panel-aperture');
     aperturePanel.render();
 
     // --- 2. Re-Cache DOM Elements ---
@@ -1696,6 +1699,7 @@ export async function setupEventListeners() {
     });
 
     initializeEnergyPlus();
+    initializeGeometryPanel(); // Initialize geometry panel to ensure DOM elements exist for validation
 
 } // End of setupEventListeners
 
@@ -1872,7 +1876,9 @@ function setupPanelToggleButtons() {
         'toggle-panel-dimensions-btn': 'panel-dimensions',
         'toggle-panel-aperture-btn': 'panel-aperture',
         'toggle-panel-materials-constructions-btn': 'panel-materials-constructions',
+        'btn-open-materials-panel': 'panel-materials-constructions',
         'toggle-panel-schedules-btn': 'panel-energyplus-schedules',
+        'toggle-panel-thermostats-btn': 'panel-energyplus-thermostats',
         'toggle-panel-checklist-btn': 'panel-checklist',
         'toggle-panel-run-btn': 'panel-run',
         'toggle-panel-eplus-config-btn': 'panel-eplus-config',
@@ -1883,11 +1889,20 @@ function setupPanelToggleButtons() {
 
 
     for (const [btnId, panelId] of Object.entries(panelMap)) {
-        const button = dom[btnId];
+        const button = dom[btnId] || document.getElementById(btnId);
         if (button) {
-            // Special handler for schedules button - use the imported function
-            if (btnId === 'toggle-panel-schedules-btn') {
+            // Special handler for project setup button - use the imported function
+            if (btnId === 'toggle-panel-project-btn') {
+                button.addEventListener('click', () => openProjectSetupPanel());
+                // Special handler for materials button - use the imported function
+            } else if (btnId === 'btn-open-materials-panel') {
+                button.addEventListener('click', () => openMaterialsManagerPanel());
+                // Special handler for schedules button - use the imported function
+            } else if (btnId === 'toggle-panel-schedules-btn') {
                 button.addEventListener('click', () => openSchedulesManagerPanel());
+                // Special handler for thermostats button - use the imported function
+            } else if (btnId === 'toggle-panel-thermostats-btn') {
+                button.addEventListener('click', () => openThermostatsPanel());
             } else {
                 button.addEventListener('click', () => togglePanelVisibility(panelId, btnId));
             }
@@ -1984,10 +1999,12 @@ export function initializePanelControls(win) {
                 win.classList.add('hidden');
                 const panelMap = {
                     'panel-project': 'toggle-panel-project-btn',
+                    'panel-project-setup': 'toggle-panel-project-btn',
                     'panel-dimensions': 'toggle-panel-dimensions-btn',
                     'panel-aperture': 'toggle-panel-aperture-btn',
                     'panel-lighting': 'toggle-panel-lighting-btn',
-                    'panel-materials-constructions': 'toggle-panel-materials-constructions-btn',
+                    'panel-materials-constructions': 'btn-open-materials-panel',
+                    'panel-energyplus-schedules': 'toggle-panel-schedules-btn',
                     'panel-sensor': 'toggle-panel-sensor-btn',
                     'panel-viewpoint': 'toggle-panel-viewpoint-btn',
                     'panel-scene-elements': 'toggle-panel-scene-btn',
@@ -2003,6 +2020,10 @@ export function initializePanelControls(win) {
                 const btnId = panelMap[win.id];
                 if (btnId && dom[btnId]) {
                     dom[btnId].classList.remove('active');
+                } else if (btnId) {
+                    // Fallback for buttons not in dom cache
+                    const btn = document.getElementById(btnId);
+                    if (btn) btn.classList.remove('active');
                 }
             }
         });
@@ -4203,6 +4224,7 @@ function onSetViewpointHere() {
 }
 
 let pointProfileChart = null; // Module-level variable to hold the chart instance
+let aperturePanel = null; // Module-level variable for the Aperture Panel instance
 
 /**
  * Renders or updates the point-specific annual profile chart.
@@ -4435,31 +4457,17 @@ function showApertureControlsFor(id) {
     const dom = getDom();
 
     const wallNames = { n: 'North', s: 'South', e: 'East', w: 'West' };
-
-    // Hide all wall control panels first
-    wallDirections.forEach(dir => {
-        const controls = dom[`aperture-controls-${dir}`];
-        if (controls) {
-            controls.classList.add('hidden');
-        }
-    });
+    const wallMap = { n: 'north', s: 'south', e: 'east', w: 'west' };
 
     // Show or hide the lock button depending on whether a wall is selected
     dom['wall-select-lock-btn']?.classList.toggle('hidden', !id);
 
     if (id) {
-        // Show the specific panel for the selected wall
-        let controls = dom[`aperture-controls-${id}`];
-        if (!controls) {
-            // Fallback: try to find it again if not in cache
-            controls = document.getElementById(`aperture-controls-${id}`);
-            if (controls) dom[`aperture-controls-${id}`] = controls;
+        // Switch to the correct tab in the Aperture Panel
+        if (aperturePanel) {
+            aperturePanel.selectCategory(wallMap[id]);
         }
-
-        if (controls) {
-            controls.classList.remove('hidden');
-            dom['selected-wall-display'].textContent = `${wallNames[id]} Wall`;
-        }
+        dom['selected-wall-display'].textContent = `${wallNames[id]} Wall`;
     } else {
         // If no ID, reset the display text and ensure the lock is off
         dom['selected-wall-display'].textContent = 'None';
@@ -5296,7 +5304,7 @@ async function setupContextControls() {
             if (isNaN(lat) || isNaN(lon)) {
                 showAlert('Please set a valid project latitude and longitude before fetching data.', 'Location Not Set');
                 // Automatically open the project panel to guide the user
-                togglePanelVisibility('panel-project', 'toggle-panel-project-btn');
+                openProjectSetupPanel();
                 return;
             }
 
@@ -6001,7 +6009,7 @@ export function switchGeometryMode(mode) {
     })();
 }
 
-async function handleModelImport() {
+export async function handleModelImport() {
     const dom = getDom();
 
     const { loadImportedModel } = await import('./geometry.js');
@@ -6802,10 +6810,9 @@ function initializeEnergyPlusConfigPanel() {
 
     document.getElementById('open-schedules-panel-btn')?.addEventListener('click', openSchedulesManagerPanel);
     document.getElementById('open-loads-panel-btn')?.addEventListener('click', openZoneLoadsManagerPanel);
-    document.getElementById('open-thermostats-panel-btn')?.addEventListener('click', openIdealLoadsManagerPanel);
+    document.getElementById('open-thermostats-panel-btn')?.addEventListener('click', openThermostatsPanel);
     document.getElementById('open-daylighting-panel-btn')?.addEventListener('click', openDaylightingManagerPanel);
     document.getElementById('open-outputs-panel-btn')?.addEventListener('click', openOutputsManagerPanel);
-    document.getElementById('open-hvac-sizing-panel-btn')?.addEventListener('click', openHvacSizingManagerPanel);
     document.getElementById('open-outdoor-air-panel-btn')?.addEventListener('click', openOutdoorAirManagerPanel);
     document.getElementById('open-shading-panel-btn')?.addEventListener('click', openShadingManagerPanel);
 }
