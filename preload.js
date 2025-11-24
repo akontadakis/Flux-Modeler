@@ -39,6 +39,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // --- Methods that expect a return value (invoked) ---
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  openFile: () => ipcRenderer.invoke('dialog:openFile'),
   saveProject: (args) => ipcRenderer.invoke('fs:saveProject', args),
   runScriptHeadless: (args) => ipcRenderer.invoke('run-script-headless', args),
   runSimulationsParallel: (args) => ipcRenderer.invoke('run-simulations-parallel', args),

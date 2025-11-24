@@ -462,7 +462,7 @@ function _createWallSegment(key, props, winParams, { H, wallThickness }) {
     const surfaceOpacity = isTransparent ? parseFloat(dom['surface-opacity'].value) : 1.0;
     const materialProperties = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, side: THREE.DoubleSide, clippingPlanes: renderer.clippingPlanes, clipIntersection: true, transparent: isTransparent, opacity: surfaceOpacity };
     const wallMaterial = new THREE.MeshBasicMaterial({ ...materialProperties, color: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--wall-color').trim()) });
-    const windowMaterial = new THREE.MeshBasicMaterial({ color: 0xb3ecff, side: THREE.DoubleSide, transparent: true, opacity: parseFloat(dom['glazing-trans'].value), clippingPlanes: renderer.clippingPlanes, clipIntersection: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 1 });
+    const windowMaterial = new THREE.MeshBasicMaterial({ color: 0xb3ecff, side: THREE.DoubleSide, transparent: true, opacity: dom['glazing-trans'] ? parseFloat(dom['glazing-trans'].value) : 0.6, clippingPlanes: renderer.clippingPlanes, clipIntersection: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 1 });
     const frameMaterial = new THREE.MeshBasicMaterial({ ...materialProperties, color: new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--frame-color').trim()) });
 
     const wallMeshGroup = new THREE.Group();

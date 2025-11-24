@@ -19,7 +19,6 @@ import { getConfig, setWeather, setSimulationControl } from './energyplusConfigS
 import {
     openMaterialsManagerPanel,
     openConstructionsManagerPanel,
-    openSchedulesManagerPanel,
     openZoneLoadsManagerPanel,
     openIdealLoadsManagerPanel,
     openDaylightingManagerPanel,
@@ -28,6 +27,7 @@ import {
     openOutdoorAirManagerPanel,
     openShadingManagerPanel
 } from './energyplusSidebar.js';
+import { openSchedulesManagerPanel } from './energyplusSchedules.js';
 
 // --- SHORTCUTS ---
 // Centralized object to define all keyboard shortcut actions
@@ -51,7 +51,7 @@ const shortcutActions = {
     'toggleDimensionsPanel': () => togglePanelVisibility('panel-dimensions', 'toggle-panel-dimensions-btn'),
     'toggleAperturePanel': () => togglePanelVisibility('panel-aperture', 'toggle-panel-aperture-btn'),
 
-    'toggleMaterialsPanel': () => togglePanelVisibility('panel-materials', 'toggle-panel-materials-btn'),
+    'toggleMaterialsPanel': () => togglePanelVisibility('panel-materials-constructions', 'toggle-panel-materials-constructions-btn'),
 
 
 
@@ -1772,7 +1772,7 @@ const PANEL_BUTTON_MAP = {
     'panel-dimensions': 'toggle-panel-dimensions-btn',
     'panel-aperture': 'toggle-panel-aperture-btn',
 
-    'panel-materials': 'toggle-panel-materials-btn',
+    'panel-materials-constructions': 'toggle-panel-materials-constructions-btn',
 
     'panel-info': 'info-button',
     'panel-recipe-guides': 'recipe-guides-btn',
@@ -1871,7 +1871,8 @@ function setupPanelToggleButtons() {
         'toggle-panel-project-btn': 'panel-project',
         'toggle-panel-dimensions-btn': 'panel-dimensions',
         'toggle-panel-aperture-btn': 'panel-aperture',
-        'toggle-panel-materials-btn': 'panel-materials',
+        'toggle-panel-materials-constructions-btn': 'panel-materials-constructions',
+        'toggle-panel-schedules-btn': 'panel-energyplus-schedules',
         'toggle-panel-checklist-btn': 'panel-checklist',
         'toggle-panel-run-btn': 'panel-run',
         'toggle-panel-eplus-config-btn': 'panel-eplus-config',
@@ -1879,10 +1880,17 @@ function setupPanelToggleButtons() {
         'info-button': 'panel-info'
     };
 
+
+
     for (const [btnId, panelId] of Object.entries(panelMap)) {
         const button = dom[btnId];
         if (button) {
-            button.addEventListener('click', () => togglePanelVisibility(panelId, btnId));
+            // Special handler for schedules button - use the imported function
+            if (btnId === 'toggle-panel-schedules-btn') {
+                button.addEventListener('click', () => openSchedulesManagerPanel());
+            } else {
+                button.addEventListener('click', () => togglePanelVisibility(panelId, btnId));
+            }
         } else {
             console.warn(`Button with ID '${btnId}' not found in the DOM.`);
         }
@@ -1979,7 +1987,7 @@ export function initializePanelControls(win) {
                     'panel-dimensions': 'toggle-panel-dimensions-btn',
                     'panel-aperture': 'toggle-panel-aperture-btn',
                     'panel-lighting': 'toggle-panel-lighting-btn',
-                    'panel-materials': 'toggle-panel-materials-btn',
+                    'panel-materials-constructions': 'toggle-panel-materials-constructions-btn',
                     'panel-sensor': 'toggle-panel-sensor-btn',
                     'panel-viewpoint': 'toggle-panel-viewpoint-btn',
                     'panel-scene-elements': 'toggle-panel-scene-btn',
@@ -4309,201 +4317,19 @@ function onShowAnnualProfile() {
 */
 export function setupWelcomeScreen() {
     const dom = getDom();
-
     const welcomeScreen = document.getElementById('welcome-screen');
-    const canvas = document.getElementById('glow-canvas');
-    if (!welcomeScreen || !canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-    let currentEffectIndex = 0;
-    const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    if (!welcomeScreen) return;
 
-    // --- EFFECT 1: Raycasting ---
-    const raycastEffect = {
-        boundaries: [],
-        rays: [],
-        init() {
-            this.boundaries = [];
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
-
-            this.boundaries.push(new this.Boundary(0, 0, w, 0));
-            this.boundaries.push(new this.Boundary(w, 0, w, h));
-            this.boundaries.push(new this.Boundary(0, h, w, h));
-            this.boundaries.push(new this.Boundary(0, 0, 0, h));
-
-            for (let i = 0; i < 4; i++) {
-                this.boundaries.push(new this.Boundary(Math.random() * w, Math.random() * h, Math.random() * w, Math.random() * h));
-            }
-            if (this.rays.length === 0) {
-                for (let a = 0; a < 360; a += 1.5) {
-                    this.rays.push(new this.Ray(a * Math.PI / 180));
-                }
-            }
-        },
-
-        animate() {
-            const theme = document.documentElement.getAttribute('data-theme') || 'light';
-            let bgColor, rayColor, hitColor;
-            if (theme === 'dark') { bgColor = '#212121'; rayColor = 'rgba(224, 224, 224, 0.1)'; hitColor = 'rgba(224, 224, 224, 0.8)'; }
-            else if (theme === 'cyber') { bgColor = '#030d22'; rayColor = 'rgba(77, 139, 238, 0.2)'; hitColor = '#00f6ff'; }
-            else { bgColor = '#E9E9EF'; rayColor = 'rgba(52, 52, 52, 0.1)'; hitColor = 'rgba(52, 52, 52, 0.7)'; }
-
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-
-            for (const ray of this.rays) {
-                let closestPoint = null;
-                let record = Infinity;
-                for (const wall of this.boundaries) {
-                    const pt = ray.cast(wall, mouse);
-                    if (pt) {
-                        const d = Math.hypot(pt.x - mouse.x, pt.y - mouse.y);
-                        if (d < record) {
-                            record = d;
-                            closestPoint = pt;
-                        }
-                    }
-                }
-                if (closestPoint) {
-                    ctx.strokeStyle = rayColor;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(mouse.x, mouse.y);
-                    ctx.lineTo(closestPoint.x, closestPoint.y);
-                    ctx.stroke();
-                    ctx.fillStyle = hitColor;
-                    ctx.beginPath();
-                    ctx.arc(closestPoint.x, closestPoint.y, 3, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-        },
-
-        Boundary: class {
-            constructor(x1, y1, x2, y2) { this.a = { x: x1, y: y1 }; this.b = { x: x2, y: y2 }; }
-        },
-        Ray: class {
-            constructor(angle) { this.dir = { x: Math.cos(angle), y: Math.sin(angle) }; }
-            cast(wall, origin) {
-                const [x1, y1, x2, y2] = [wall.a.x, wall.a.y, wall.b.x, wall.b.y];
-                const [x3, y3, x4, y4] = [origin.x, origin.y, origin.x + this.dir.x, origin.y + this.dir.y];
-                const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-                if (den === 0) return null;
-                const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
-                const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
-                if (t > 0 && t < 1 && u > 0) return { x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) };
-                return null;
-            }
-        }
-    };
-
-    // --- EFFECT 2: Flashlight ---
-    const flashlightEffect = {
-        shapes: [],
-        init() {
-            this.shapes = [];
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
-            for (let i = 0; i < 50; i++) {
-                this.shapes.push(new this.Shape(w, h));
-            }
-        },
-
-        animate() {
-            const theme = document.documentElement.getAttribute('data-theme') || 'light';
-            let bgColor;
-            if (theme === 'dark') { bgColor = '#212121'; }
-            else if (theme === 'cyber') { bgColor = '#030d22'; }
-            else { bgColor = '#E9E9EF'; }
-
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-
-            for (const shape of this.shapes) {
-                shape.draw(ctx);
-            }
-
-            ctx.globalCompositeOperation = 'destination-in';
-
-            const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 250);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-
-            ctx.globalCompositeOperation = 'source-over';
-        },
-
-        Shape: class {
-            constructor(w, h) {
-                this.x = Math.random() * w;
-                this.y = Math.random() * h;
-                this.type = Math.random() > 0.5 ? 'circle' : 'rect';
-                const colors = ['#ff2e97', '#00f6ff', '#ffd400', '#4d8bee', '#E1DEDE', '#888888'];
-                this.color = colors[Math.floor(Math.random() * colors.length)];
-                if (this.type === 'circle') { this.radius = Math.random() * 30 + 10; }
-                else { this.width = Math.random() * 60 + 20; this.height = Math.random() * 60 + 20; }
-            }
-            draw(ctx) {
-                ctx.fillStyle = this.color;
-                if (this.type === 'circle') {
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.fillRect(this.x - this.width / 2, this.y - this.height / 2, this.width, this.height);
-                }
-            }
-        }
-    };
-
-    const effects = [raycastEffect, flashlightEffect];
-
-    function switchEffect(index) {
-        cancelAnimationFrame(animationFrameId);
-        currentEffectIndex = index % effects.length;
-        const effect = effects[currentEffectIndex];
-
-        // A single animation loop that calls the current effect's animate function
-        function animationLoop() {
-            effect.animate();
-            animationFrameId = requestAnimationFrame(animationLoop);
-        }
-
-        effect.init(); // Initialize the new effect
-        animationLoop(); // Start its animation
-    }
-
-    function resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.scale(dpr, dpr);
-        effects[currentEffectIndex].init();
-    }
-
-    function onMouseMove(e) {
-        mouse.x = e.clientX;
-        mouse.y = e.clientY;
-    }
-
+    // Helper to hide screen
     function hideWelcomeScreen() {
         welcomeScreen.style.opacity = '0';
         setTimeout(() => {
             welcomeScreen.style.display = 'none';
-            cancelAnimationFrame(animationFrameId);
-            window.removeEventListener('mousemove', onMouseMove);
-            if (resizeObserver) resizeObserver.disconnect();
         }, 500);
     }
 
-    // --- Setup Event Listeners ---
-    const resizeObserver = new ResizeObserver(() => resizeCanvas());
-    resizeObserver.observe(welcomeScreen);
-    window.addEventListener('mousemove', onMouseMove);
+    // --- Setup Event Listeners for Options ---
 
     dom['start-with-shoebox']?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -4517,15 +4343,6 @@ export function setupWelcomeScreen() {
         hideWelcomeScreen();
         togglePanelVisibility('panel-dimensions', 'toggle-panel-dimensions-btn');
     });
-
-    dom['cycle-effect-btn']?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        switchEffect(currentEffectIndex + 1);
-    });
-
-    // Initial setup
-    resizeCanvas();
-    switchEffect(0);
 }
 
 /**
@@ -6982,8 +6799,7 @@ function toggleCustomLocationFields(show) {
  * Initialize EnergyPlus Configuration Panel button event listeners
  */
 function initializeEnergyPlusConfigPanel() {
-    document.getElementById('open-materials-panel-btn')?.addEventListener('click', openMaterialsManagerPanel);
-    document.getElementById('open-constructions-panel-btn')?.addEventListener('click', openConstructionsManagerPanel);
+
     document.getElementById('open-schedules-panel-btn')?.addEventListener('click', openSchedulesManagerPanel);
     document.getElementById('open-loads-panel-btn')?.addEventListener('click', openZoneLoadsManagerPanel);
     document.getElementById('open-thermostats-panel-btn')?.addEventListener('click', openIdealLoadsManagerPanel);

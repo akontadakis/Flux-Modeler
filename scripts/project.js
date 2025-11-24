@@ -289,7 +289,7 @@ class Project {
                     shading: { type: getValue('shading-mat-type'), reflectance: getValue('shading-refl', parseFloat), specularity: getValue('shading-spec', parseFloat), roughness: getValue('shading-rough', parseFloat) },
                     furniture: { type: getValue('furniture-mat-type'), reflectance: getValue('furniture-refl', parseFloat), specularity: getValue('furniture-spec', parseFloat), roughness: getValue('furniture-rough', parseFloat) },
                     glazing: {
-                        transmittance: getValue('glazing-trans', parseFloat),
+                        transmittance: 0.6, // Default value as UI control is removed
                         bsdfEnabled: getChecked('bsdf-toggle'),
                         bsdfFile: getChecked('bsdf-toggle') && this.simulationFiles['bsdf-file'] ? { inputId: 'bsdf-file', name: this.simulationFiles['bsdf-file'].name } : null
                     },

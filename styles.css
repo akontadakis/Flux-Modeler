@@ -1896,8 +1896,9 @@ html[data-theme="light"] .leaflet-tile-pane {
   inset: 0;
   z-index: 10000;
 
-  /* Use a nearly transparent background. The backdrop-filter creates the glass effect, which will be visible through the transparent parts of the canvas. */
-  background-color: rgba(0, 0, 0, 0.01);
+  /* Adjusted transparency: 0.90 = 90% opaque. Lower this value (e.g., 0.5) for more transparency. */
+  /* We use var(--bg-main-rgb) so it adapts if you switch between Light/Dark themes. */
+  background-color: rgba(var(--bg-main-rgb), 0.90);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -1935,7 +1936,7 @@ html[data-theme="light"] .leaflet-tile-pane {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 2rem;
+  gap: 2.0rem;
 }
 
 .welcome-title {
@@ -1986,20 +1987,18 @@ html[data-theme="light"] .leaflet-tile-pane {
 
 .welcome-option-card:hover {
   transform: translateY(-5px);
-  border-color: #F59E0B;
-  /* Sun Amber */
+  border-color: var(--highlight-color);
   /* An inset shadow representing heat/light entering the card */
   box-shadow:
-    inset 20px 20px 60px rgba(245, 158, 11, 0.15),
-    /* Warm internal glow */
-    0 8px 30px rgba(245, 158, 11, 0.2);
-  /* External casting shadow */
+    inset 0 0 20px rgba(var(--highlight-rgb), 0.1),
+    0 0 15px rgba(var(--highlight-rgb), 0.4),
+    0 8px 30px rgba(0, 0, 0, 0.1);
 }
 
 .welcome-option-card:hover .option-icon {
-  color: #F59E0B;
+  color: var(--highlight-color);
   transform: scale(1.1) rotate(15deg);
-  /* Sun icon rotates slightly */
+  filter: drop-shadow(0 0 8px var(--highlight-color));
 }
 
 .welcome-option-card .option-icon {
@@ -2037,11 +2036,9 @@ html[data-theme="light"] .leaflet-tile-pane {
 }
 
 #welcome-logo-container {
-  width: 100px;
-  height: 100px;
-  position: relative;
-  top: -12px;
-  /* Adjust this value to shift the logo vertically */
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
 }
 
 .welcome-logo {

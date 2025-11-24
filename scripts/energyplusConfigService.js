@@ -75,36 +75,36 @@ export function getRawEnergyPlusConfig(meta) {
     return {};
 }
 
+
+
 /**
- * Normalize schedules.compact into a predictable internal structure.
+ * Normalize schedules into a predictable internal structure.
  * Supports:
- *  - Array of {name, typeLimits, lines}
- *  - Object map { [name]: { typeLimits, lines } }
+ *  - compact: Array of {name, typeLimits, lines}
+ *  - typeLimits: Array of {name, lowerLimit, upperLimit, numericType, unitType}
+ *  - dayHourly: Array of {name, typeLimits, values: [24]}
+ *  - constant: Array of {name, typeLimits, value}
+ *  - file: Array of {name, typeLimits, fileName, columnNumber, rowsToSkip, hoursOfData, columnSeparator, interpolate, minutesPerItem, adjustDST}
+ *  - fileShading: Array of {name, fileName}
  */
 export function normalizeSchedules(ep) {
     const result = {
         compact: [],
+        typeLimits: [],
+        dayHourly: [],
+        constant: [],
+        file: [],
+        fileShading: [],
     };
 
     if (!ep || typeof ep !== 'object') return result;
 
-    const raw = ep.schedules && ep.schedules.compact;
-    if (!raw) return result;
+    const scheds = ep.schedules || {};
 
-    const pushIfValid = (name, value) => {
-        if (!name || !value) return;
-        const nm = String(name);
-        const lines = Array.isArray(value.lines) ? value.lines.slice() : [];
-        if (!lines.length) return;
-        result.compact.push({
-            name: nm,
-            typeLimits: value.typeLimits || 'Fraction',
-            lines,
-        });
-    };
-
-    if (Array.isArray(raw)) {
-        raw.forEach((s) => {
+    // 1. Compact
+    const rawCompact = scheds.compact;
+    if (Array.isArray(rawCompact)) {
+        rawCompact.forEach((s) => {
             if (!s || !s.name || !Array.isArray(s.lines)) return;
             result.compact.push({
                 name: String(s.name),
@@ -112,14 +112,55 @@ export function normalizeSchedules(ep) {
                 lines: s.lines.slice(),
             });
         });
-        return result;
+    } else if (rawCompact && typeof rawCompact === 'object') {
+        Object.keys(rawCompact).forEach((nm) => {
+            const v = rawCompact[nm];
+            if (!v || !Array.isArray(v.lines)) return;
+            result.compact.push({
+                name: nm,
+                typeLimits: v.typeLimits || 'Fraction',
+                lines: v.lines.slice(),
+            });
+        });
     }
 
-    if (raw && typeof raw === 'object') {
-        Object.keys(raw).forEach((nm) => {
-            const v = raw[nm];
-            if (!v || !Array.isArray(v.lines)) return;
-            pushIfValid(nm, v);
+    // 2. TypeLimits
+    const rawTypeLimits = scheds.typeLimits;
+    if (Array.isArray(rawTypeLimits)) {
+        rawTypeLimits.forEach(s => {
+            if (s && s.name) result.typeLimits.push({ ...s });
+        });
+    }
+
+    // 3. DayHourly
+    const rawDayHourly = scheds.dayHourly;
+    if (Array.isArray(rawDayHourly)) {
+        rawDayHourly.forEach(s => {
+            if (s && s.name) result.dayHourly.push({ ...s });
+        });
+    }
+
+    // 4. Constant
+    const rawConstant = scheds.constant;
+    if (Array.isArray(rawConstant)) {
+        rawConstant.forEach(s => {
+            if (s && s.name) result.constant.push({ ...s });
+        });
+    }
+
+    // 5. File
+    const rawFile = scheds.file;
+    if (Array.isArray(rawFile)) {
+        rawFile.forEach(s => {
+            if (s && s.name) result.file.push({ ...s });
+        });
+    }
+
+    // 6. File:Shading
+    const rawFileShading = scheds.fileShading;
+    if (Array.isArray(rawFileShading)) {
+        rawFileShading.forEach(s => {
+            if (s && s.name) result.fileShading.push({ ...s });
         });
     }
 
@@ -221,8 +262,8 @@ export function normalizeSimulationControl(ep, meta = {}) {
             northAxis: isNum(building.northAxis)
                 ? building.northAxis
                 : isNum(ep && ep.northAxis)
-                ? ep.northAxis
-                : 0.0,
+                    ? ep.northAxis
+                    : 0.0,
             terrain: building.terrain || ep.terrain || 'City',
             loadsTolerance: isNum(building.loadsTolerance)
                 ? building.loadsTolerance
@@ -244,8 +285,8 @@ export function normalizeSimulationControl(ep, meta = {}) {
             timestepsPerHour: isNum(sc.timestep && sc.timestep.timestepsPerHour)
                 ? sc.timestep.timestepsPerHour
                 : isNum(ep && ep.timestep)
-                ? ep.timestep
-                : 4,
+                    ? ep.timestep
+                    : 4,
         },
         simulationControlFlags: {
             doZoneSizing: typeof simFlags.doZoneSizing === 'boolean'
@@ -459,20 +500,66 @@ export function setConstructions(project, constructions, defaults) {
 
 export function setSchedulesCompact(project, compactArray) {
     const safe = Array.isArray(compactArray) ? compactArray : [];
-    // Store as object map for stability; builder/normalizer will accept both.
-    const compact = {};
-    safe.forEach((s) => {
-        if (!s || !s.name || !Array.isArray(s.lines)) return;
-        compact[s.name] = {
-            typeLimits: s.typeLimits || 'Fraction',
-            lines: s.lines.slice(),
-        };
-    });
     updateConfig(project, (ep) => ({
         ...ep,
         schedules: {
             ...(ep.schedules || {}),
-            compact,
+            compact: safe,
+        },
+    }));
+}
+
+export function setSchedulesTypeLimits(project, typeLimitsArray) {
+    const safe = Array.isArray(typeLimitsArray) ? typeLimitsArray : [];
+    updateConfig(project, (ep) => ({
+        ...ep,
+        schedules: {
+            ...(ep.schedules || {}),
+            typeLimits: safe,
+        },
+    }));
+}
+
+export function setSchedulesDayHourly(project, dayHourlyArray) {
+    const safe = Array.isArray(dayHourlyArray) ? dayHourlyArray : [];
+    updateConfig(project, (ep) => ({
+        ...ep,
+        schedules: {
+            ...(ep.schedules || {}),
+            dayHourly: safe,
+        },
+    }));
+}
+
+export function setSchedulesConstant(project, constantArray) {
+    const safe = Array.isArray(constantArray) ? constantArray : [];
+    updateConfig(project, (ep) => ({
+        ...ep,
+        schedules: {
+            ...(ep.schedules || {}),
+            constant: safe,
+        },
+    }));
+}
+
+export function setSchedulesFile(project, fileArray) {
+    const safe = Array.isArray(fileArray) ? fileArray : [];
+    updateConfig(project, (ep) => ({
+        ...ep,
+        schedules: {
+            ...(ep.schedules || {}),
+            file: safe,
+        },
+    }));
+}
+
+export function setSchedulesFileShading(project, fileShadingArray) {
+    const safe = Array.isArray(fileShadingArray) ? fileShadingArray : [];
+    updateConfig(project, (ep) => ({
+        ...ep,
+        schedules: {
+            ...(ep.schedules || {}),
+            fileShading: safe,
         },
     }));
 }
@@ -506,8 +593,8 @@ export function setZoneLoads(project, zoneLoads) {
 export function setZoneLoadsCanonical(project, zoneLoads) {
     const safe = Array.isArray(zoneLoads)
         ? zoneLoads
-              .filter((z) => z && z.zoneName)
-              .map((z) => ({ ...z }))
+            .filter((z) => z && z.zoneName)
+            .map((z) => ({ ...z }))
         : [];
     updateConfig(project, (ep) => ({
         ...ep,
@@ -533,11 +620,11 @@ export function setZoneLoadsCanonical(project, zoneLoads) {
 export function setZoneThermostatAssignments(project, assignments) {
     const safe = Array.isArray(assignments)
         ? assignments
-              .filter((a) => a && a.zoneName && a.thermostatName)
-              .map((a) => ({
-                  zoneName: String(a.zoneName),
-                  thermostatName: String(a.thermostatName),
-              }))
+            .filter((a) => a && a.zoneName && a.thermostatName)
+            .map((a) => ({
+                zoneName: String(a.zoneName),
+                thermostatName: String(a.thermostatName),
+            }))
         : [];
 
     updateConfig(project, (ep) => ({
@@ -614,8 +701,8 @@ export function setThermostatsAndIdealLoads(project, { thermostats, idealLoads }
 export function setThermostatSetpoints(project, setpoints) {
     const safe = Array.isArray(setpoints)
         ? setpoints
-              .filter((sp) => sp && typeof sp.name === 'string' && sp.name.trim())
-              .map((sp) => ({ ...sp, name: sp.name.trim() }))
+            .filter((sp) => sp && typeof sp.name === 'string' && sp.name.trim())
+            .map((sp) => ({ ...sp, name: sp.name.trim() }))
         : [];
     updateConfig(project, (ep) => ({
         ...ep,
@@ -653,8 +740,8 @@ export function setSizingZones(project, zones) {
 export function setSizingSystems(project, systems) {
     const safeSystems = Array.isArray(systems)
         ? systems
-              .filter((s) => s && s.airLoopName)
-              .map((s) => ({ ...s }))
+            .filter((s) => s && s.airLoopName)
+            .map((s) => ({ ...s }))
         : [];
     updateConfig(project, (ep) => ({
         ...ep,
@@ -672,8 +759,8 @@ export function setSizingSystems(project, systems) {
 export function setSizingPlants(project, plants) {
     const safePlants = Array.isArray(plants)
         ? plants
-              .filter((p) => p && p.plantLoopName)
-              .map((p) => ({ ...p }))
+            .filter((p) => p && p.plantLoopName)
+            .map((p) => ({ ...p }))
         : [];
     updateConfig(project, (ep) => ({
         ...ep,
@@ -691,8 +778,8 @@ export function setSizingPlants(project, plants) {
 export function setOutdoorAirDesignSpecs(project, designSpecs) {
     const safe = Array.isArray(designSpecs)
         ? designSpecs
-              .filter((d) => d && d.name)
-              .map((d) => ({ ...d }))
+            .filter((d) => d && d.name)
+            .map((d) => ({ ...d }))
         : [];
     updateConfig(project, (ep) => ({
         ...ep,

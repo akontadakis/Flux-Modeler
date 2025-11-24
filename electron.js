@@ -37,6 +37,17 @@ app.whenReady().then(() => {
     return null;
   });
 
+  // Handle request to open a file
+  ipcMain.handle('dialog:openFile', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+    });
+    if (!canceled) {
+      return filePaths[0];
+    }
+    return null;
+  });
+
   // Handle request to save the entire project
   ipcMain.handle('fs:saveProject', async (event, { projectPath, files }) => {
     for (const file of files) {
@@ -234,182 +245,182 @@ app.whenReady().then(() => {
   });
 
 
-// Handle request to run a script headlessly (without sending streaming output)
-ipcMain.handle('run-script-headless', async (event, { projectPath, scriptContent, scriptName }) => {
-  // If no specific name is given, create a temporary one
-  const finalScriptName = scriptName || `temp-sim-${Date.now()}.sh`;
-  const scriptPath = path.join(projectPath, '07_scripts', finalScriptName);
-  const scriptDir = path.dirname(scriptPath);
+  // Handle request to run a script headlessly (without sending streaming output)
+  ipcMain.handle('run-script-headless', async (event, { projectPath, scriptContent, scriptName }) => {
+    // If no specific name is given, create a temporary one
+    const finalScriptName = scriptName || `temp-sim-${Date.now()}.sh`;
+    const scriptPath = path.join(projectPath, '07_scripts', finalScriptName);
+    const scriptDir = path.dirname(scriptPath);
 
-  try {
-    await fsp.mkdir(scriptDir, { recursive: true });
-    await fsp.writeFile(scriptPath, scriptContent);
+    try {
+      await fsp.mkdir(scriptDir, { recursive: true });
+      await fsp.writeFile(scriptPath, scriptContent);
 
-    return new Promise((resolve) => {
-    const isWindows = process.platform === 'win32';
-    // For Windows, the command is just the script name. Rely on 'cwd'.
-    // For non-Windows, ensure executable and run.
-    const command = isWindows
-      ? finalScriptName
-      : `chmod +x "${scriptPath}" && "${scriptPath}"`;
+      return new Promise((resolve) => {
+        const isWindows = process.platform === 'win32';
+        // For Windows, the command is just the script name. Rely on 'cwd'.
+        // For non-Windows, ensure executable and run.
+        const command = isWindows
+          ? finalScriptName
+          : `chmod +x "${scriptPath}" && "${scriptPath}"`;
 
-    exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
-      // Clean up the temporary script
-        if (!scriptName) {
-          fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
-        }
+        exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+          // Clean up the temporary script
+          if (!scriptName) {
+            fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
+          }
 
-        if (error) {
-          console.error(`Headless exec error: ${error}`);
-          resolve({ success: false, stdout: stdout, stderr: stderr, code: error.code });
-          return;
-        }
-        resolve({ success: true, stdout: stdout, stderr: stderr, code: 0 });
+          if (error) {
+            console.error(`Headless exec error: ${error}`);
+            resolve({ success: false, stdout: stdout, stderr: stderr, code: error.code });
+            return;
+          }
+          resolve({ success: true, stdout: stdout, stderr: stderr, code: 0 });
+        });
       });
-    });
-  } catch (err) {
+    } catch (err) {
       console.error("Failed during headless script setup:", err);
       return { success: false, stderr: err.message, code: -1 };
-  }
-});
-
-// Handle request to run multiple simulations in parallel with a concurrency limit
-ipcMain.handle('run-simulations-parallel', async (event, { simulations }) => {
-  const maxConcurrent = Math.max(1, os.cpus().length - 1);
-  const results = new Array(simulations.length);
-  const queue = simulations.map((sim, index) => ({ ...sim, originalIndex: index })); // Keep track of original order
-
-  const runWorker = async () => {
-      while (queue.length > 0) {
-          const task = queue.shift();
-          if (task) {
-              console.log(`Worker picking up task ${task.originalIndex}`);
-              const result = await new Promise(async (resolve) => {
-                  const finalScriptName = task.scriptName || `temp-sim-${task.originalIndex}-${Date.now()}.sh`;
-                  const scriptPath = path.join(task.projectPath, '07_scripts', finalScriptName);
-                  const scriptDir = path.dirname(scriptPath);
-
-                  try {
-                  await fsp.mkdir(scriptDir, { recursive: true });
-                  await fsp.writeFile(scriptPath, task.scriptContent);
-
-                  const isWindows = process.platform === 'win32';
-                  // For Windows, the command is just the script name. Rely on 'cwd'.
-                  // For non-Windows, ensure executable and run.
-                  const command = isWindows ? finalScriptName : `chmod +x "${scriptPath}" && "${scriptPath}"`;
-
-                  exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
-                      if (!task.scriptName) {
-                              fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
-                          }
-                          if (error) {
-                              resolve({ success: false, stdout, stderr, code: error.code });
-                          } else {
-                              resolve({ success: true, stdout, stderr, code: 0 });
-                          }
-                      });
-                  } catch (err) {
-                      resolve({ success: false, stderr: err.message, code: -1 });
-                  }
-              });
-              results[task.originalIndex] = result;
-              console.log(`Worker finished task ${task.originalIndex}`);
-          }
-      }
-  };
-
-  const workers = Array(maxConcurrent).fill(null).map(() => runWorker());
-  await Promise.all(workers);
-
-  return results;
-});
-
-// Handle request to read a file and return its content
-ipcMain.handle('fs:readFile', async (event, { projectPath, filePath }) => {
-  try {
-    if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
-      console.error('fs:readFile - Invalid projectPath or filePath', { projectPath, filePath });
-      return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
     }
-    const fullPath = path.join(projectPath, filePath);
-    const content = await fsp.readFile(fullPath); // Returns a Buffer
-    return { success: true, content: content, name: path.basename(filePath) };
-  } catch (err) {
-    console.error(`Failed to read file: ${filePath}`, err);
-    return { success: false, error: err.message };
-  }
-});
+  });
 
-// Handle request to check if a file exists
-ipcMain.handle('fs:checkFileExists', async (event, { projectPath, filePath }) => {
-  try {
-    if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
-      console.error('fs:checkFileExists - Invalid projectPath or filePath', { projectPath, filePath });
+  // Handle request to run multiple simulations in parallel with a concurrency limit
+  ipcMain.handle('run-simulations-parallel', async (event, { simulations }) => {
+    const maxConcurrent = Math.max(1, os.cpus().length - 1);
+    const results = new Array(simulations.length);
+    const queue = simulations.map((sim, index) => ({ ...sim, originalIndex: index })); // Keep track of original order
+
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const task = queue.shift();
+        if (task) {
+          console.log(`Worker picking up task ${task.originalIndex}`);
+          const result = await new Promise(async (resolve) => {
+            const finalScriptName = task.scriptName || `temp-sim-${task.originalIndex}-${Date.now()}.sh`;
+            const scriptPath = path.join(task.projectPath, '07_scripts', finalScriptName);
+            const scriptDir = path.dirname(scriptPath);
+
+            try {
+              await fsp.mkdir(scriptDir, { recursive: true });
+              await fsp.writeFile(scriptPath, task.scriptContent);
+
+              const isWindows = process.platform === 'win32';
+              // For Windows, the command is just the script name. Rely on 'cwd'.
+              // For non-Windows, ensure executable and run.
+              const command = isWindows ? finalScriptName : `chmod +x "${scriptPath}" && "${scriptPath}"`;
+
+              exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+                if (!task.scriptName) {
+                  fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
+                }
+                if (error) {
+                  resolve({ success: false, stdout, stderr, code: error.code });
+                } else {
+                  resolve({ success: true, stdout, stderr, code: 0 });
+                }
+              });
+            } catch (err) {
+              resolve({ success: false, stderr: err.message, code: -1 });
+            }
+          });
+          results[task.originalIndex] = result;
+          console.log(`Worker finished task ${task.originalIndex}`);
+        }
+      }
+    };
+
+    const workers = Array(maxConcurrent).fill(null).map(() => runWorker());
+    await Promise.all(workers);
+
+    return results;
+  });
+
+  // Handle request to read a file and return its content
+  ipcMain.handle('fs:readFile', async (event, { projectPath, filePath }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:readFile - Invalid projectPath or filePath', { projectPath, filePath });
+        return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
+      }
+      const fullPath = path.join(projectPath, filePath);
+      const content = await fsp.readFile(fullPath); // Returns a Buffer
+      return { success: true, content: content, name: path.basename(filePath) };
+    } catch (err) {
+      console.error(`Failed to read file: ${filePath}`, err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Handle request to check if a file exists
+  ipcMain.handle('fs:checkFileExists', async (event, { projectPath, filePath }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:checkFileExists - Invalid projectPath or filePath', { projectPath, filePath });
+        return false;
+      }
+      const fullPath = path.join(projectPath, filePath);
+      await fsp.access(fullPath);
+      return true;
+    } catch {
       return false;
     }
-    const fullPath = path.join(projectPath, filePath);
-    await fsp.access(fullPath);
-    return true;
-  } catch {
-    return false;
-  }
-});
+  });
 
-// Handle request to write a file
-ipcMain.handle('fs:writeFile', async (event, { projectPath, filePath, content }) => {
-  try {
-    if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
-      console.error('fs:writeFile - Invalid projectPath or filePath', { projectPath, filePath });
-      return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
-    }
-    const fullPath = path.join(projectPath, filePath);
-    const dir = path.dirname(fullPath);
-    await fsp.mkdir(dir, { recursive: true });
-    await fsp.writeFile(fullPath, content);
-    return { success: true };
-  } catch (err) {
-    console.error(`Failed to write file: ${filePath}`, err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Handle request to run a Python script
-ipcMain.handle('run-python-script', async (event, { projectPath, scriptPath }) => {
-  return new Promise((resolve) => {
-    const fullScriptPath = path.join(projectPath, scriptPath);
-    const scriptDir = path.dirname(fullScriptPath);
-    
-    // Use python3 command (works on macOS/Linux, may need adjustment for Windows)
-    const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
-    const command = `${pythonCommand} "${fullScriptPath}"`;
-    
-    console.log(`Executing Python script: ${command}`);
-    
-    exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Python script error: ${error}`);
-        resolve({ 
-          success: false, 
-          stdout: stdout, 
-          stderr: stderr, 
-          error: error.message,
-          code: error.code 
-        });
-        return;
+  // Handle request to write a file
+  ipcMain.handle('fs:writeFile', async (event, { projectPath, filePath, content }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:writeFile - Invalid projectPath or filePath', { projectPath, filePath });
+        return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
       }
-      
-      console.log(`Python script completed successfully`);
-      resolve({ 
-        success: true, 
-        stdout: stdout, 
-        stderr: stderr, 
-        code: 0 
+      const fullPath = path.join(projectPath, filePath);
+      const dir = path.dirname(fullPath);
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(fullPath, content);
+      return { success: true };
+    } catch (err) {
+      console.error(`Failed to write file: ${filePath}`, err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Handle request to run a Python script
+  ipcMain.handle('run-python-script', async (event, { projectPath, scriptPath }) => {
+    return new Promise((resolve) => {
+      const fullScriptPath = path.join(projectPath, scriptPath);
+      const scriptDir = path.dirname(fullScriptPath);
+
+      // Use python3 command (works on macOS/Linux, may need adjustment for Windows)
+      const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+      const command = `${pythonCommand} "${fullScriptPath}"`;
+
+      console.log(`Executing Python script: ${command}`);
+
+      exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Python script error: ${error}`);
+          resolve({
+            success: false,
+            stdout: stdout,
+            stderr: stderr,
+            error: error.message,
+            code: error.code
+          });
+          return;
+        }
+
+        console.log(`Python script completed successfully`);
+        resolve({
+          success: true,
+          stdout: stdout,
+          stderr: stderr,
+          code: 0
+        });
       });
     });
   });
-});
 
-createWindow();
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -22,7 +22,8 @@ export function setupDOM() {
 
         // Toolbars
         'left-toolbar', 'left-controls-container', 'toggle-panel-project-btn', 'toggle-panel-dimensions-btn',
-        'toggle-panel-aperture-btn', 'toggle-panel-lighting-btn', 'toggle-panel-materials-btn',
+        'toggle-panel-aperture-btn', 'toggle-panel-lighting-btn', 'toggle-panel-materials-constructions-btn',
+        'toggle-panel-schedules-btn',
         'toggle-panel-sensor-btn', 'toggle-panel-viewpoint-btn', 'toggle-panel-scene-btn', 'toggle-panel-energyplus-btn',
         'dock-left-sidebar-btn', 'dock-top-sidebar-btn',
         'view-controls', 'view-btn-persp', 'view-btn-ortho', 'view-btn-top', 'view-btn-front', 'view-btn-back', 'view-btn-left', 'view-btn-right', 'view-btn-quad',
@@ -78,19 +79,9 @@ export function setupDOM() {
         'sun-ray-info-display', 'sun-altitude-val', 'sun-azimuth-val', 'sun-dni-val', 'sun-dhi-val',
 
         // Materials Panel
-        'wall-mat-type', 'floor-mat-type', 'ceiling-mat-type', 'frame-mat-type', 'shading-mat-type', 'furniture-mat-type',
-        'wall-refl', 'wall-refl-val', 'floor-refl', 'floor-refl-val', 'ceiling-refl', 'ceiling-refl-val', 'furniture-refl', 'furniture-refl-val',
-        'glazing-trans', 'glazing-trans-val',
-        'wall-spec', 'wall-spec-val', 'floor-spec', 'floor-spec-val', 'ceiling-spec', 'ceiling-spec-val', 'furniture-spec', 'furniture-spec-val',
-        'wall-rough', 'wall-rough-val', 'floor-rough', 'floor-rough-val', 'ceiling-rough', 'ceiling-rough-val', 'furniture-rough', 'furniture-rough-val',
-        'frame-refl', 'frame-refl-val', 'frame-spec', 'frame-spec-val', 'frame-rough', 'frame-rough-val',
-        'shading-refl', 'shading-refl-val', 'shading-spec', 'shading-spec-val', 'shading-rough',
-        'shading-rough-val', 'wall-color', 'floor-color', 'ceiling-color', 'frame-color', 'shading-color',
-        'wall-mode-refl', 'wall-mode-srd', 'wall-refl-controls', 'wall-srd-controls', 'wall-srd-file',
-        'floor-mode-refl', 'floor-mode-srd', 'floor-refl-controls', 'floor-srd-controls', 'floor-srd-file',
-        'ceiling-mode-refl', 'ceiling-mode-srd', 'ceiling-refl-controls', 'ceiling-srd-controls', 'ceiling-srd-file',
-        'bsdf-toggle', 'bsdf-controls', 'view-bsdf-btn', 'bsdf-viewer-panel', 'bsdf-info-display',
-        'bsdf-incident-angle-select', 'bsdf-polar-plot-canvas',
+        // Materials Panel (Removed)
+        // 'wall-mat-type', ... (removed)
+
 
         // Sensor Panel
         'illuminance-grid-color', 'view-grid-color', 'bsdf-file',
