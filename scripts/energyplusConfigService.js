@@ -772,6 +772,21 @@ export function setSizingPlants(project, plants) {
 }
 
 /**
+ * Phase 5: Global Sizing (Sizing:Parameters)
+ * Update ep.sizing.parameters.
+ */
+export function setSizingParameters(project, parameters) {
+    const safe = parameters && typeof parameters === 'object' ? { ...parameters } : {};
+    updateConfig(project, (ep) => ({
+        ...ep,
+        sizing: {
+            ...(ep.sizing && typeof ep.sizing === 'object' ? ep.sizing : {}),
+            parameters: safe,
+        },
+    }));
+}
+
+/**
  * Phase 1: Outdoor Air Design Specifications
  * Overwrite ep.outdoorAir.designSpecs with provided array.
  */
