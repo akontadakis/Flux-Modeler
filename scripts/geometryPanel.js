@@ -121,7 +121,7 @@ export function createGeometryPanel() {
             
             <div style="display: flex; flex: 1; overflow: hidden;">
                 <!-- Left Sidebar: Category List -->
-                <div style="width: 160px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
                     <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
                         <span class="label">Sections</span>
                     </div>
@@ -160,6 +160,7 @@ function renderCategoryList(panel) {
         const item = document.createElement('div');
         item.className = 'list-item';
         item.dataset.categoryId = cat.id; // Store ID for styling updates
+        // Match Thermostats styling
         item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
 
         item.innerHTML = `<div class="text-xs">${cat.label}</div>`;
@@ -228,9 +229,11 @@ function switchCategory(panel, categoryId) {
     const listItems = panel.querySelectorAll('.list-item');
     listItems.forEach(item => {
         if (item.dataset.categoryId === categoryId) {
+            item.classList.add('active');
             item.style.backgroundColor = 'var(--accent-color)';
             item.style.color = 'white';
         } else {
+            item.classList.remove('active');
             item.style.backgroundColor = '';
             item.style.color = '';
         }
@@ -254,7 +257,7 @@ function switchCategory(panel, categoryId) {
 function renderDimensionsControls() {
     return `
         <div id="parametric-controls" class="space-y-4">
-            <h3 class="font-semibold text-sm uppercase">Room Dimensions</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Room Dimensions</h3>
             
             <div>
                 <label class="label" for="width">Width (X)</label>
@@ -324,7 +327,7 @@ function renderDimensionsControls() {
 function renderImportControls() {
     return `
         <div id="import-controls" class="space-y-4">
-            <h3 class="font-semibold text-sm uppercase">Import Model</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Import Model</h3>
             
             <p class="info-box !text-xs !py-2 !px-3">
                 Import a .obj model. Parametric controls will be disabled. Ensure your model is in meters.
@@ -332,7 +335,7 @@ function renderImportControls() {
             
             <div>
                 <label class="label" for="import-obj-file">OBJ Model File</label>
-                <input type="file" id="import-obj-file" accept=".obj,.mtl" class="w-full text-sm" multiple>
+                <input type="file" id="import-obj-file" accept=".obj,.mtl" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" multiple>
                 <span data-file-display-for="import-obj-file" class="text-xs text-[--text-secondary] truncate block mt-1">
                     Select .obj and .mtl files.
                 </span>
@@ -341,7 +344,7 @@ function renderImportControls() {
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="label text-xs" for="import-scale">Scale Factor</label>
-                    <input type="number" id="import-scale" value="1.0" step="0.01" class="w-full mt-1">
+                    <input type="number" id="import-scale" value="1.0" step="0.01" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 </div>
                 <label for="import-center-toggle" class="flex items-center cursor-pointer mt-4">
                     <input type="checkbox" id="import-center-toggle" checked>
@@ -357,7 +360,7 @@ function renderImportControls() {
 function renderDisplayControls() {
     return `
         <div class="space-y-4">
-            <h3 class="font-semibold text-sm uppercase">Scene Display</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Scene Display</h3>
             
             <div class="space-y-3">
                 <label for="transparent-toggle" class="flex items-center cursor-pointer">

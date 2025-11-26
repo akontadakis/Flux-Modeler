@@ -207,8 +207,8 @@ function createThermostatsPanel() {
     panel.id = 'panel-energyplus-thermostats';
     panel.className = 'floating-window ui-panel resizable-panel';
 
-    panel.style.width = '850px';
-    panel.style.height = '600px';
+    panel.style.width = '600px';
+    panel.style.height = '500px';
 
     panel.innerHTML = `
         <div class="window-header">

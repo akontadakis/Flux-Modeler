@@ -434,6 +434,22 @@ export function getConfig(project) {
         shading: ep.shading && typeof ep.shading === 'object'
             ? { ...ep.shading }
             : {},
+        // Internal Gains
+        people: Array.isArray(ep.people) ? ep.people.slice() : [],
+        lights: Array.isArray(ep.lights) ? ep.lights.slice() : [],
+        electricEquipment: Array.isArray(ep.electricEquipment) ? ep.electricEquipment.slice() : [],
+        gasEquipment: Array.isArray(ep.gasEquipment) ? ep.gasEquipment.slice() : [],
+        hotWaterEquipment: Array.isArray(ep.hotWaterEquipment) ? ep.hotWaterEquipment.slice() : [],
+        steamEquipment: Array.isArray(ep.steamEquipment) ? ep.steamEquipment.slice() : [],
+        otherEquipment: Array.isArray(ep.otherEquipment) ? ep.otherEquipment.slice() : [],
+
+        // Airflow
+        zoneInfiltration: Array.isArray(ep.zoneInfiltration) ? ep.zoneInfiltration.slice() : [],
+        zoneVentilation: Array.isArray(ep.zoneVentilation) ? ep.zoneVentilation.slice() : [],
+        zoneMixing: Array.isArray(ep.zoneMixing) ? ep.zoneMixing.slice() : [],
+        zoneCrossMixing: Array.isArray(ep.zoneCrossMixing) ? ep.zoneCrossMixing.slice() : [],
+        zoneRefrigerationDoorMixing: Array.isArray(ep.zoneRefrigerationDoorMixing) ? ep.zoneRefrigerationDoorMixing.slice() : [],
+        zoneEarthtube: Array.isArray(ep.zoneEarthtube) ? ep.zoneEarthtube.slice() : [],
     };
 
     return { meta, ep, config };
@@ -603,6 +619,62 @@ export function setZoneLoadsCanonical(project, zoneLoads) {
 }
 
 /**
+ * Set People objects.
+ */
+export function setPeople(project, people) {
+    const safe = Array.isArray(people) ? people.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, people: safe }));
+}
+
+/**
+ * Set Lights objects.
+ */
+export function setLights(project, lights) {
+    const safe = Array.isArray(lights) ? lights.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, lights: safe }));
+}
+
+/**
+ * Set ElectricEquipment objects.
+ */
+export function setElectricEquipment(project, equipment) {
+    const safe = Array.isArray(equipment) ? equipment.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, electricEquipment: safe }));
+}
+
+/**
+ * Set GasEquipment objects.
+ */
+export function setGasEquipment(project, equipment) {
+    const safe = Array.isArray(equipment) ? equipment.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, gasEquipment: safe }));
+}
+
+/**
+ * Set HotWaterEquipment objects.
+ */
+export function setHotWaterEquipment(project, equipment) {
+    const safe = Array.isArray(equipment) ? equipment.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, hotWaterEquipment: safe }));
+}
+
+/**
+ * Set SteamEquipment objects.
+ */
+export function setSteamEquipment(project, equipment) {
+    const safe = Array.isArray(equipment) ? equipment.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, steamEquipment: safe }));
+}
+
+/**
+ * Set OtherEquipment objects.
+ */
+export function setOtherEquipment(project, equipment) {
+    const safe = Array.isArray(equipment) ? equipment.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, otherEquipment: safe }));
+}
+
+/**
  * Minimal helper for thermostat-to-zone assignments.
  *
  * Input shape:
@@ -731,6 +803,54 @@ export function setSizingZones(project, zones) {
             zones: safeZones,
         },
     }));
+}
+
+/**
+ * Set ZoneInfiltration objects.
+ */
+export function setZoneInfiltration(project, infiltration) {
+    const safe = Array.isArray(infiltration) ? infiltration.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneInfiltration: safe }));
+}
+
+/**
+ * Set ZoneVentilation objects.
+ */
+export function setZoneVentilation(project, ventilation) {
+    const safe = Array.isArray(ventilation) ? ventilation.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneVentilation: safe }));
+}
+
+/**
+ * Set ZoneMixing objects.
+ */
+export function setZoneMixing(project, mixing) {
+    const safe = Array.isArray(mixing) ? mixing.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneMixing: safe }));
+}
+
+/**
+ * Set ZoneCrossMixing objects.
+ */
+export function setZoneCrossMixing(project, crossMixing) {
+    const safe = Array.isArray(crossMixing) ? crossMixing.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneCrossMixing: safe }));
+}
+
+/**
+ * Set ZoneRefrigerationDoorMixing objects.
+ */
+export function setZoneRefrigerationDoorMixing(project, mixing) {
+    const safe = Array.isArray(mixing) ? mixing.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneRefrigerationDoorMixing: safe }));
+}
+
+/**
+ * Set ZoneEarthtube objects.
+ */
+export function setZoneEarthtube(project, earthtube) {
+    const safe = Array.isArray(earthtube) ? earthtube.slice() : [];
+    updateConfig(project, (ep) => ({ ...ep, zoneEarthtube: safe }));
 }
 
 /**

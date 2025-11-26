@@ -65,8 +65,8 @@ function createProjectSetupPanel() {
     panel.id = 'panel-project-setup';
     panel.className = 'floating-window ui-panel resizable-panel';
 
-    panel.style.width = '800px';
-    panel.style.height = '600px';
+    panel.style.width = '600px';
+    panel.style.height = '500px';
 
     panel.innerHTML = `
         <div class="window-header">
@@ -127,8 +127,11 @@ function renderCategoryList(panel) {
     CATEGORIES.forEach(cat => {
         const item = document.createElement('div');
         item.className = 'list-item';
+        // Match Thermostats styling
         item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+
         if (cat.id === currentCategory) {
+            item.classList.add('active');
             item.style.backgroundColor = 'var(--accent-color)';
             item.style.color = 'white';
         }
@@ -376,11 +379,11 @@ function setupCategoryEventListeners(categoryId) {
 function renderBuildingSettings() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">Building Settings</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Building Settings</h3>
 
             <div>
                 <label class="label text-xs">Building Name</label>
-                <input type="text" id="sc-b-name" class="w-full mt-1" placeholder="Enter building name">
+                <input type="text" id="sc-b-name" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" placeholder="Enter building name">
             </div>
 
             <div>
@@ -411,7 +414,7 @@ function renderBuildingSettings() {
                             conduction method usually has its own parameters for the calculation.</span>
                     </span>
                 </label>
-                <select id="sc-b-terrain" class="w-full mt-1">
+                <select id="sc-b-terrain" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Country">Country</option>
                     <option value="Suburbs">Suburbs</option>
                     <option value="City" selected>City</option>
@@ -434,7 +437,7 @@ function renderBuildingSettings() {
                             solar reflections from exterior surfaces.</span>
                     </span>
                 </label>
-                <select id="sc-b-solar" class="w-full mt-1">
+                <select id="sc-b-solar" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="MinimalShadowing">MinimalShadowing</option>
                     <option value="FullExterior">FullExterior</option>
                     <option value="FullInteriorAndExterior">FullInteriorAndExterior</option>
@@ -450,7 +453,7 @@ function renderBuildingSettings() {
 function renderConvectionSettings() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">Surface Convection Algorithms</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Surface Convection Algorithms</h3>
 
             <div>
                 <label class="label text-xs">Inside Algorithm
@@ -465,7 +468,7 @@ function renderConvectionSettings() {
                             based on ASTM C1340 standard.</span>
                     </span>
                 </label>
-                <select id="sc-conv-in" class="w-full mt-1">
+                <select id="sc-conv-in" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Simple">Simple</option>
                     <option value="TARP" selected>TARP</option>
                     <option value="CeilingDiffuser">CeilingDiffuser</option>
@@ -487,7 +490,7 @@ function renderConvectionSettings() {
                             that auto-selects best model.</span>
                     </span>
                 </label>
-                <select id="sc-conv-out" class="w-full mt-1">
+                <select id="sc-conv-out" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Simple">Simple</option>
                     <option value="TARP">TARP</option>
                     <option value="CeilingDiffuser">CeilingDiffuser</option>
@@ -510,7 +513,7 @@ function renderSimulationControl(config) {
 
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase flex items-center">
+            <h3 class="font-semibold text-sm uppercase flex items-center border-b border-[--grid-color] pb-2">
                 Simulation Control
                 <span class="info-icon">i
                     <span class="info-popover"><strong>Zone Sizing</strong> - Calculates zone design
@@ -562,7 +565,7 @@ function renderSimulationControl(config) {
 function renderTimestepSettings() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">Timestep</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Timestep</h3>
 
             <div>
                 <label class="label text-xs">Timesteps per Hour
@@ -572,7 +575,7 @@ function renderTimestepSettings() {
                             6 (10 min), 12 (5 min), 60 (1 min).</span>
                     </span>
                 </label>
-                <select id="sc-timestep" class="w-full mt-1">
+                <select id="sc-timestep" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="1">1 (60 minutes)</option>
                     <option value="2">2 (30 minutes)</option>
                     <option value="3">3 (20 minutes)</option>
@@ -593,7 +596,7 @@ function renderTimestepSettings() {
 function renderShadowCalculation() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">
                 Shadow Calculation
                 <span class="info-icon">i
                     <span class="info-popover">Controls EnergyPlus's solar, shadowing and daylighting models.
@@ -611,7 +614,7 @@ function renderShadowCalculation() {
                             Use pre-calculated shading data</span>
                     </span>
                 </label>
-                <select id="sc-shadow-method" class="w-full mt-1">
+                <select id="sc-shadow-method" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="PolygonClipping" selected>PolygonClipping (default)</option>
                     <option value="PixelCounting">PixelCounting</option>
                     <option value="Scheduled">Scheduled</option>
@@ -621,7 +624,7 @@ function renderShadowCalculation() {
 
             <div>
                 <label class="label text-xs">Update Frequency Method</label>
-                <select id="sc-shadow-freq-method" class="w-full mt-1">
+                <select id="sc-shadow-freq-method" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Periodic" selected>Periodic (faster, default)</option>
                     <option value="Timestep">Timestep (required for dynamic shading)</option>
                 </select>
@@ -636,7 +639,7 @@ function renderShadowCalculation() {
                             devices.</span>
                     </span>
                 </label>
-                <input type="number" id="sc-shadow-freq" class="w-full mt-1" min="1" max="365" value="20"
+                <input type="number" id="sc-shadow-freq" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" min="1" max="365" value="20"
                     step="1">
             </div>
 
@@ -648,7 +651,7 @@ function renderShadowCalculation() {
                             when shading surfaces have changing transmittance during the year</span>
                     </span>
                 </label>
-                <select id="sc-sky-diffuse" class="w-full mt-1">
+                <select id="sc-sky-diffuse" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="SimpleSkyDiffuseModeling" selected>SimpleSkyDiffuseModeling (default)
                     </option>
                     <option value="DetailedSkyDiffuseModeling">DetailedSkyDiffuseModeling</option>
@@ -661,7 +664,7 @@ function renderShadowCalculation() {
 function renderSizingPeriod() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">
                 Sizing Period: Weather File Days
                 <span class="info-icon">i
                     <span class="info-popover">Select a period from the weather file for load calculations or
@@ -672,13 +675,13 @@ function renderSizingPeriod() {
 
             <div>
                 <label class="label text-xs">Period Name</label>
-                <input type="text" id="sc-sizing-name" class="w-full mt-1" placeholder="e.g., Summer Week">
+                <input type="text" id="sc-sizing-name" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" placeholder="e.g., Summer Week">
             </div>
 
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="label text-xs">Begin Month</label>
-                    <select id="sc-sizing-begin-month" class="w-full mt-1">
+                    <select id="sc-sizing-begin-month" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="1">January</option>
                         <option value="2">February</option>
                         <option value="3">March</option>
@@ -695,7 +698,7 @@ function renderSizingPeriod() {
                 </div>
                 <div>
                     <label class="label text-xs">Begin Day</label>
-                    <input type="number" id="sc-sizing-begin-day" class="w-full mt-1" min="1" max="31"
+                    <input type="number" id="sc-sizing-begin-day" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" min="1" max="31"
                         value="1">
                 </div>
             </div>
@@ -703,7 +706,7 @@ function renderSizingPeriod() {
             <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label class="label text-xs">End Month</label>
-                    <select id="sc-sizing-end-month" class="w-full mt-1">
+                    <select id="sc-sizing-end-month" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="1">January</option>
                         <option value="2">February</option>
                         <option value="3">March</option>
@@ -720,13 +723,13 @@ function renderSizingPeriod() {
                 </div>
                 <div>
                     <label class="label text-xs">End Day</label>
-                    <input type="number" id="sc-sizing-end-day" class="w-full mt-1" min="1" max="31" value="7">
+                    <input type="number" id="sc-sizing-end-day" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" min="1" max="31" value="7">
                 </div>
             </div>
 
             <div>
                 <label class="label text-xs">Day of Week for Start Day</label>
-                <select id="sc-sizing-start-day" class="w-full mt-1">
+                <select id="sc-sizing-start-day" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Sunday">Sunday</option>
                     <option value="Monday" selected>Monday</option>
                     <option value="Tuesday">Tuesday</option>
@@ -760,7 +763,7 @@ function renderSizingPeriod() {
 function renderWeatherLocation() {
     return `
         <div class="space-y-3">
-            <h3 class="font-semibold text-sm uppercase">Weather & Location</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Weather & Location</h3>
 
             <!-- Project EPW selection -->
             <div class="panel-subtle space-y-2">
@@ -770,7 +773,7 @@ function renderWeatherLocation() {
                     </span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <input type="text" class="w-full text-xs" id="epw-path" placeholder="No EPW selected"
+                    <input type="text" class="w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" id="epw-path" placeholder="No EPW selected"
                         readonly>
                     <button class="btn btn-xxs btn-secondary" id="upload-epw-btn">
                         Select EPW

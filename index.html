@@ -384,6 +384,60 @@
                     <span class="tooltip" role="tooltip">Thermostats & IdealLoads</span>
                 </div>
 
+                <div class="action-button-container">
+                    <button id="toggle-panel-zone-loads-btn" class="btn" aria-label="Zone Loads">
+                        <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg"
+                            xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 227.772 227.772"
+                            style="enable-background:new 0 0 227.772 227.772;" xml:space="preserve" fill="currentColor">
+                            <path d="M214.198,63.824h-53.148c0.681-1,1.222-1.492,1.56-1.821c6.936-6.731,10.307-14.738,10.307-24.456
+	c0-8.375-3.333-16.01-9.387-21.488c-5.776-5.229-13.581-8.112-21.974-8.112s-16.197,2.879-21.974,8.108
+	c-6.054,5.479-9.388,13.108-9.388,21.483c0,14.259,7.92,21.993,10.521,24.528c0.328,0.319,0.846,0.758,1.497,1.758H68.914
+	c-7.716,0-14.143,6.238-14.143,13.954v42.734c0-0.389-0.658-0.711-0.879-0.938c-6.731-6.936-14.645-10.307-24.363-10.307
+	c-8.375,0-15.963,3.333-21.442,9.387C2.859,124.432,0,132.236,0,140.629s2.89,16.197,8.12,21.974
+	c5.479,6.054,13.114,9.388,21.489,9.388c14.259,0,21.811-7.92,24.345-10.521c0.212-0.217,0.819-0.518,0.819-0.88v45.122
+	c0,7.716,6.427,14.113,14.143,14.113h145.283c7.716,0,13.574-6.397,13.574-14.113V77.778
+	C227.772,70.062,221.913,63.824,214.198,63.824z M101.937,197.824l5.913-57h22.396c-10.887-5-18.558-15.095-18.558-27.459
+	c0-16.323,13.371-29.608,29.868-29.608c16.495,0,29.867,13.309,29.867,29.633c0,12.365-7.672,22.435-18.558,27.435h22.396l5.913,57
+	H101.937z" />
+                        </svg>
+                    </button>
+                    <span class="tooltip" role="tooltip">Zone Loads</span>
+                </div>
+
+                <div class="action-button-container">
+                    <button id="toggle-panel-airflow-btn" class="btn" aria-label="Outdoor Air & Ventilation">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+                        </svg>
+                    </button>
+                    <span class="tooltip" role="tooltip">Outdoor Air & Ventilation</span>
+                </div>
+
+                <div class="action-button-container">
+                    <button id="toggle-panel-daylighting-btn" class="btn" aria-label="Daylighting">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72.668 72.668" xml:space="preserve"
+                            fill="currentColor">
+                            <path
+                                d="M0 36.334c0 20.034 16.299 36.334 36.334 36.334s36.334-16.3 36.334-36.334S56.369 0 36.334 0 0 16.3 0 36.334M23.163 6.195c12.94-8.23 31.183-2.797 40.666 12.111C73.31 33.213 70.5 52.039 57.56 60.269 44.621 68.5 26.376 63.068 16.893 48.161c-9.481-14.908-6.669-33.735 6.27-41.966" />
+                        </svg>
+                    </button>
+                    <span class="tooltip" role="tooltip">Daylighting</span>
+                </div>
+
+                <div class="action-button-container">
+                    <button id="toggle-panel-shading-btn" class="btn" aria-label="Shading & Solar Control">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                        </svg>
+                    </button>
+                    <span class="tooltip" role="tooltip">Shading & Solar Control</span>
+                </div>
+
 
 
 
@@ -391,10 +445,17 @@
 
                 <div class="action-button-container">
                     <button id="toggle-panel-checklist-btn" class="btn" aria-label="Simulation Checklist">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 11l3 3L22 4"></path>
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        <svg viewBox="0 0 32 32" data-name="Layer 1" id="Layer_1" xmlns="http://www.w3.org/2000/svg"
+                            fill="currentColor">
+                            <path
+                                d="M9.22,12.38,5.92,16.5,3.71,14.29a1,1,0,0,0-1.42,1.42l3,3A1,1,0,0,0,6,19h.06a1,1,0,0,0,.72-.38l4-5a1,1,0,1,0-1.56-1.24Z" />
+                            <path
+                                d="M9.22,2.38,5.92,6.5,3.71,4.29A1,1,0,0,0,2.29,5.71l3,3A1,1,0,0,0,6,9h.06a1,1,0,0,0,.72-.38l4-5A1,1,0,1,0,9.22,2.38Z" />
+                            <path d="M14,7H29a1,1,0,0,0,0-2H14a1,1,0,0,0,0,2Z" />
+                            <path d="M29,15H14a1,1,0,0,0,0,2H29a1,1,0,0,0,0-2Z" />
+                            <path d="M29,25H14a1,1,0,0,0,0,2H29a1,1,0,0,0,0-2Z" />
+                            <path
+                                d="M9.71,21.29a1,1,0,0,0-1.42,0L6,23.59l-2.29-2.3a1,1,0,0,0-1.42,1.42L4.59,25l-2.3,2.29a1,1,0,0,0,0,1.42,1,1,0,0,0,1.42,0L6,26.41l2.29,2.3a1,1,0,0,0,1.42,0,1,1,0,0,0,0-1.42L7.41,25l2.3-2.29A1,1,0,0,0,9.71,21.29Z" />
                         </svg>
                     </button>
                     <span class="tooltip" role="tooltip">Simulation Checklist</span>
@@ -410,19 +471,7 @@
                     <span class="tooltip" role="tooltip">Run Simulation</span>
                 </div>
 
-                <div class="action-button-container">
-                    <button id="toggle-panel-eplus-config-btn" class="btn" aria-label="Configuration">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M12 1v6m0 6v6"></path>
-                            <path d="m4.93 4.93 4.24 4.24m5.66 5.66 4.24 4.24"></path>
-                            <path d="M1 12h6m6 0h6"></path>
-                            <path d="m4.93 19.07 4.24-4.24m5.66-5.66 4.24-4.24"></path>
-                        </svg>
-                    </button>
-                    <span class="tooltip" role="tooltip">Configuration</span>
-                </div>
+
 
 
                 <div class="action-button-container">
@@ -540,7 +589,7 @@
             <div class="resize-handle-corner bottom-right"></div>
         </div>
 
-        <div id="panel-run" class="floating-window ui-panel hidden">
+        <div id="panel-run" class="floating-window ui-panel hidden" style="width: 600px; height: 500px;">
             <div class="window-header">
                 <span>Run Simulation</span>
                 <div class="window-controls">
@@ -562,51 +611,7 @@
             <div class="resize-handle-corner bottom-right"></div>
         </div>
 
-        <div id="panel-eplus-config" class="floating-window ui-panel hidden">
-            <div class="window-header">
-                <span>EnergyPlus Configuration</span>
-                <div class="window-controls">
-                    <div class="window-icon-max"></div>
-                    <div class="collapse-icon"></div>
-                    <div class="window-icon-close"></div>
-                </div>
-            </div>
-            <div class="window-content">
-                <div class="window-content-inner space-y-4">
-                    <p class="text-sm text-[--text-secondary] mb-4">Configure EnergyPlus settings for thermal
-                        simulation.</p>
 
-                    <div class="space-y-2">
-                        <h3 class="font-semibold text-xs uppercase text-[--text-secondary]">Core Configuration</h3>
-
-                        <button id="open-loads-panel-btn" class="btn btn-secondary w-full text-left">Zone Loads</button>
-                        <button id="open-thermostats-panel-btn" class="btn btn-secondary w-full text-left">Thermostats &
-                            IdealLoads</button>
-                    </div>
-
-                    <div class="border-t border-[--grid-color]"></div>
-
-                    <div class="space-y-2">
-                        <h3 class="font-semibold text-xs uppercase text-[--text-secondary]">Advanced Settings</h3>
-                        <button id="open-daylighting-panel-btn"
-                            class="btn btn-secondary w-full text-left">Daylighting</button>
-                        <button id="open-outputs-panel-btn" class="btn btn-secondary w-full text-left">Outputs</button>
-                        <button id="open-outdoor-air-panel-btn" class="btn btn-secondary w-full text-left">Outdoor Air &
-                            Ventilation</button>
-                        <button id="open-shading-panel-btn" class="btn btn-secondary w-full text-left">Shading & Solar
-                            Control</button>
-                    </div>
-                </div>
-            </div>
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-        </div>
 
 
         <!-- Project Setup Panel removed (now dynamically created by energyplusProjectSetup.js) -->
@@ -637,7 +642,7 @@
 
 
 
-        <div id="panel-info" class="floating-window ui-panel hidden" style="width: 600px; height: 70vh;">
+        <div id="panel-info" class="floating-window ui-panel hidden" style="width: 600px; height: 500px;">
             <div class="window-header">
                 <span>Application Information & Help</span>
                 <div class="window-controls">
@@ -2819,11 +2824,13 @@
                 <div class="flex flex-col gap-3">
                     <div>
                         <label for="ep-opt-goal-metric" class="label text-xs">Metric</label>
-                        <select id="ep-opt-goal-metric" class="w-full mt-1"></select>
+                        <select id="ep-opt-goal-metric"
+                            class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none"></select>
                     </div>
                     <div>
                         <label for="ep-opt-goal-type" class="label text-xs">Goal</label>
-                        <select id="ep-opt-goal-type" class="w-full mt-1">
+                        <select id="ep-opt-goal-type"
+                            class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                             <option value="minimize">Minimize</option>
                             <option value="maximize">Maximize</option>
                             <option value="set-target">Set Target</option>

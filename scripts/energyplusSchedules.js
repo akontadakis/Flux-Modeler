@@ -122,7 +122,7 @@ function renderSchedulesList(panel) {
     let html = '';
 
     const renderItem = (name, type, icon) => `
-        <div class="sched-item" data-name="${name}" data-type="${type}" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+        <div class="sched-item" data-name="${name}" data-type="${type}" style="padding: 0.5rem 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; border-bottom: 1px solid var(--grid-color);">
             <span style="opacity: 0.7;">${icon}</span>
             <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</span>
         </div>
@@ -163,8 +163,14 @@ function renderSchedulesList(panel) {
     listContainer.querySelectorAll('.sched-item').forEach(el => {
         el.addEventListener('click', () => {
             // Highlight selection
-            listContainer.querySelectorAll('.sched-item').forEach(i => i.style.backgroundColor = '');
-            el.style.backgroundColor = 'var(--grid-color)';
+            listContainer.querySelectorAll('.sched-item').forEach(i => {
+                i.style.backgroundColor = '';
+                i.style.color = '';
+                i.classList.remove('active');
+            });
+            el.classList.add('active');
+            el.style.backgroundColor = 'var(--accent-color)';
+            el.style.color = 'white';
 
             const name = el.getAttribute('data-name');
             const type = el.getAttribute('data-type');
@@ -202,7 +208,7 @@ function renderScheduleEditor(panel, selectedItem, isNew) {
         <div class="space-y-4">
             <div>
                 <label class="label">Schedule Type</label>
-                <select id="sched-type-select" class="w-full mt-1" ${!isNew ? 'disabled' : ''}>
+                <select id="sched-type-select" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" ${!isNew ? 'disabled' : ''}>
                     <option value="ScheduleTypeLimits" ${type === 'ScheduleTypeLimits' ? 'selected' : ''}>ScheduleTypeLimits</option>
                     <option value="Schedule:Day:Hourly" ${type === 'Schedule:Day:Hourly' ? 'selected' : ''}>Schedule:Day:Hourly</option>
                     <option value="Schedule:Compact" ${type === 'Schedule:Compact' ? 'selected' : ''}>Schedule:Compact</option>
@@ -214,7 +220,7 @@ function renderScheduleEditor(panel, selectedItem, isNew) {
             
             <div>
                 <label class="label">Name</label>
-                <input type="text" id="sched-name" class="w-full mt-1" value="${data.name || ''}" ${!isNew ? 'readonly' : ''}>
+                <input type="text" id="sched-name" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.name || ''}" ${!isNew ? 'readonly' : ''}>
             </div>
     `;
 
@@ -307,7 +313,7 @@ function getFieldsForType(type, data, allSchedules) {
     const typeLimitsSelect = `
         <div>
             <label class="label">Schedule Type Limits Name</label>
-            <select id="sched-typelimits" class="w-full mt-1">
+            <select id="sched-typelimits" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 <option value="">-- Select Type Limits --</option>
                 ${typeLimitsOptions}
             </select>
@@ -319,23 +325,23 @@ function getFieldsForType(type, data, allSchedules) {
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="label">Lower Limit Value</label>
-                    <input type="number" step="any" id="stl-lower" class="w-full mt-1" value="${data.lowerLimit !== undefined ? data.lowerLimit : ''}">
+                    <input type="number" step="any" id="stl-lower" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.lowerLimit !== undefined ? data.lowerLimit : ''}">
                 </div>
                 <div>
                     <label class="label">Upper Limit Value</label>
-                    <input type="number" step="any" id="stl-upper" class="w-full mt-1" value="${data.upperLimit !== undefined ? data.upperLimit : ''}">
+                    <input type="number" step="any" id="stl-upper" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.upperLimit !== undefined ? data.upperLimit : ''}">
                 </div>
             </div>
             <div>
                 <label class="label">Numeric Type</label>
-                <select id="stl-numeric" class="w-full mt-1">
+                <select id="stl-numeric" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Continuous" ${data.numericType === 'Continuous' ? 'selected' : ''}>Continuous</option>
                     <option value="Discrete" ${data.numericType === 'Discrete' ? 'selected' : ''}>Discrete</option>
                 </select>
             </div>
             <div>
                 <label class="label">Unit Type</label>
-                <select id="stl-unit" class="w-full mt-1">
+                <select id="stl-unit" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Dimensionless" ${data.unitType === 'Dimensionless' ? 'selected' : ''}>Dimensionless</option>
                     <option value="Temperature" ${data.unitType === 'Temperature' ? 'selected' : ''}>Temperature</option>
                     <option value="DeltaTemperature" ${data.unitType === 'DeltaTemperature' ? 'selected' : ''}>DeltaTemperature</option>
@@ -360,7 +366,7 @@ function getFieldsForType(type, data, allSchedules) {
             hoursHtml += `
                 <div>
                     <label class="label text-[10px]">Hour ${i + 1}</label>
-                    <input type="number" step="any" class="w-full mt-1 text-xs sdh-val" data-hour="${i}" value="${values[i]}">
+                    <input type="number" step="any" class="w-full mt-1 text-xs sdh-val bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" data-hour="${i}" value="${values[i]}">
                 </div>
             `;
         }
@@ -393,7 +399,7 @@ function getFieldsForType(type, data, allSchedules) {
             ${typeLimitsSelect}
             <div>
                 <label class="label">Hourly Value</label>
-                <input type="number" step="any" id="sconst-val" class="w-full mt-1" value="${data.value !== undefined ? data.value : ''}">
+                <input type="number" step="any" id="sconst-val" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.value !== undefined ? data.value : ''}">
             </div>
         `;
     } else if (type === 'Schedule:File') {
@@ -402,29 +408,29 @@ function getFieldsForType(type, data, allSchedules) {
             <div>
                 <label class="label">File Name</label>
                 <div class="flex gap-2 mt-1">
-                    <input type="text" id="sf-filename" class="w-full file-path-input" value="${data.fileName || ''}" placeholder="Select a file...">
+                    <input type="text" id="sf-filename" class="w-full file-path-input text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.fileName || ''}" placeholder="Select a file...">
                     <button class="btn btn-secondary browse-file-btn">Browse</button>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="label">Column Number</label>
-                    <input type="number" id="sf-col" class="w-full mt-1" value="${data.columnNumber || 1}">
+                    <input type="number" id="sf-col" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.columnNumber || 1}">
                 </div>
                 <div>
                     <label class="label">Rows to Skip</label>
-                    <input type="number" id="sf-skip" class="w-full mt-1" value="${data.rowsToSkip || 0}">
+                    <input type="number" id="sf-skip" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.rowsToSkip || 0}">
                 </div>
                 <div>
                     <label class="label">Hours of Data</label>
-                    <select id="sf-hours" class="w-full mt-1">
+                    <select id="sf-hours" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="8760" ${data.hoursOfData == 8760 ? 'selected' : ''}>8760</option>
                         <option value="8784" ${data.hoursOfData == 8784 ? 'selected' : ''}>8784</option>
                     </select>
                 </div>
                 <div>
                     <label class="label">Column Separator</label>
-                    <select id="sf-sep" class="w-full mt-1">
+                    <select id="sf-sep" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="Comma" ${data.columnSeparator === 'Comma' ? 'selected' : ''}>Comma</option>
                         <option value="Tab" ${data.columnSeparator === 'Tab' ? 'selected' : ''}>Tab</option>
                         <option value="Space" ${data.columnSeparator === 'Space' ? 'selected' : ''}>Space</option>
@@ -433,19 +439,19 @@ function getFieldsForType(type, data, allSchedules) {
                 </div>
                 <div>
                     <label class="label">Interpolate</label>
-                    <select id="sf-interp" class="w-full mt-1">
+                    <select id="sf-interp" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="No" ${data.interpolate === 'No' ? 'selected' : ''}>No</option>
                         <option value="Yes" ${data.interpolate === 'Yes' ? 'selected' : ''}>Yes</option>
                     </select>
                 </div>
                 <div>
                     <label class="label">Minutes Per Item</label>
-                    <input type="number" id="sf-mins" class="w-full mt-1" value="${data.minutesPerItem || 60}">
+                    <input type="number" id="sf-mins" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.minutesPerItem || 60}">
                 </div>
             </div>
             <div>
                 <label class="label">Adjust for Daylight Savings</label>
-                <select id="sf-dst" class="w-full mt-1">
+                <select id="sf-dst" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Yes" ${data.adjustDST === 'Yes' ? 'selected' : ''}>Yes</option>
                     <option value="No" ${data.adjustDST === 'No' ? 'selected' : ''}>No</option>
                 </select>
@@ -456,7 +462,7 @@ function getFieldsForType(type, data, allSchedules) {
             <div>
                 <label class="label">File Name</label>
                 <div class="flex gap-2 mt-1">
-                    <input type="text" id="sfs-filename" class="w-full file-path-input" value="${data.fileName || ''}" placeholder="Select a file...">
+                    <input type="text" id="sfs-filename" class="w-full file-path-input text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${data.fileName || ''}" placeholder="Select a file...">
                     <button class="btn btn-secondary browse-file-btn">Browse</button>
                 </div>
             </div>
@@ -509,19 +515,19 @@ function getCompactRowHtml(row = { type: 'Through', value: '' }) {
 
     if (row.type === 'Through') {
         // Date input (MM/DD)
-        inputHtml = `<input type="text" class="compact-value w-full" value="${row.value || ''}" placeholder="MM/DD (e.g. 12/31)">`;
+        inputHtml = `<input type="text" class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${row.value || ''}" placeholder="MM/DD (e.g. 12/31)">`;
     } else if (row.type === 'For') {
         // Dropdown for days
         const dayOptions = ['AllDays', 'Weekdays', 'Weekends', 'Holidays', 'AlOtherDays', 'SummerDesignDay', 'WinterDesignDay', 'Custom'];
         // Check if current value is a combination or custom
         const isStandard = dayOptions.includes(row.value);
-        inputHtml = `<input type="text" class="compact-value w-full" value="${row.value || 'AllDays'}" list="for-options" placeholder="Select or type days">
+        inputHtml = `<input type="text" class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${row.value || 'AllDays'}" list="for-options" placeholder="Select or type days">
                      <datalist id="for-options">
                         ${dayOptions.map(o => `<option value="${o}">`).join('')}
                      </datalist>`;
     } else if (row.type === 'Interpolate') {
         const opts = ['No', 'Average', 'Linear'];
-        inputHtml = `<select class="compact-value w-full">
+        inputHtml = `<select class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         ${opts.map(o => `<option value="${o}" ${row.value === o ? 'selected' : ''}>${o}</option>`).join('')}
                      </select>`;
     } else if (row.type === 'Until') {
@@ -533,17 +539,17 @@ function getCompactRowHtml(row = { type: 'Through', value: '' }) {
 
         inputHtml = `
             <div class="flex gap-2">
-                <input type="text" class="compact-time w-1/2" value="${timeVal}" placeholder="HH:MM (e.g. 17:00)" pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]">
-                <input type="number" step="0.01" min="0" max="1" class="compact-val w-1/2" value="${row.value || ''}" placeholder="Value (0-1)">
+                <input type="text" class="compact-time w-1/2 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${timeVal}" placeholder="HH:MM (e.g. 17:00)" pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]">
+                <input type="number" step="0.01" min="0" max="1" class="compact-val w-1/2 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${row.value || ''}" placeholder="Value (0-1)">
             </div>
         `;
     } else {
-        inputHtml = `<input type="text" class="compact-value w-full" value="${row.value || ''}">`;
+        inputHtml = `<input type="text" class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${row.value || ''}">`;
     }
 
     return `
         <div class="compact-row grid grid-cols-[100px_1fr_30px] gap-2 items-center bg-black/20 p-1 rounded border border-[--grid-color]">
-            <select class="compact-type-select text-xs bg-transparent border-none focus:ring-0">
+            <select class="compact-type-select text-xs bg-transparent border-none focus:ring-0 outline-none">
                 ${typeOptions.map(t => `<option value="${t}" ${t === row.type ? 'selected' : ''}>${t}</option>`).join('')}
             </select>
             <div class="compact-input-container">
@@ -589,11 +595,11 @@ function updateCompactRowInput(rowElement, type) {
     let inputHtml = '';
 
     if (type === 'Through') {
-        inputHtml = `<input type="text" class="compact-value w-full" value="" placeholder="MM/DD (e.g. 12/31)">`;
+        inputHtml = `<input type="text" class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="" placeholder="MM/DD (e.g. 12/31)">`;
     } else if (type === 'For') {
-        inputHtml = `<input type="text" class="compact-value w-full" value="AllDays" list="for-options" placeholder="Select or type days">`;
+        inputHtml = `<input type="text" class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="AllDays" list="for-options" placeholder="Select or type days">`;
     } else if (type === 'Interpolate') {
-        inputHtml = `<select class="compact-value w-full">
+        inputHtml = `<select class="compact-value w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                         <option value="No">No</option>
                         <option value="Average">Average</option>
                         <option value="Linear">Linear</option>
@@ -601,8 +607,8 @@ function updateCompactRowInput(rowElement, type) {
     } else if (type === 'Until') {
         inputHtml = `
             <div class="flex gap-2">
-                <input type="text" class="compact-time w-1/2" value="" placeholder="HH:MM (e.g. 17:00)" pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]">
-                <input type="number" step="0.01" min="0" max="1" class="compact-val w-1/2" value="" placeholder="Value (0-1)">
+                <input type="text" class="compact-time w-1/2 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="" placeholder="HH:MM (e.g. 17:00)" pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]">
+                <input type="number" step="0.01" min="0" max="1" class="compact-val w-1/2 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="" placeholder="Value (0-1)">
             </div>
         `;
     }

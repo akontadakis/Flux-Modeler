@@ -15,15 +15,15 @@ export function setupDOM() {
         'welcome-screen', 'glow-canvas', 'start-with-shoebox', 'start-with-import', 'welcome-effect-switcher', 'cycle-effect-btn',
 
         // Main Panels & Toggles
-        'panel-checklist', 'panel-run', 'panel-eplus-config', 'panel-simulation-modules', 'globals-toggle', 'globals-controls', 'panel-analysis-modules', 'toggle-modules-btn', 'toggle-analysis-btn',
-        'toggle-panel-checklist-btn', 'toggle-panel-run-btn', 'toggle-panel-eplus-config-btn',
+        'panel-checklist', 'panel-run', 'panel-simulation-modules', 'globals-toggle', 'globals-controls', 'panel-analysis-modules', 'toggle-modules-btn', 'toggle-analysis-btn',
+        'toggle-panel-checklist-btn', 'toggle-panel-run-btn',
         'toggle-panel-sensor-btn', 'toggle-panel-viewpoint-btn', 'toggle-panel-scene-btn',
         'custom-alert-title', 'custom-alert-message', 'custom-alert-close',
 
         // Toolbars
         'left-toolbar', 'left-controls-container', 'toggle-panel-project-btn', 'toggle-panel-dimensions-btn',
-        'toggle-panel-aperture-btn', 'toggle-panel-lighting-btn', 'toggle-panel-materials-constructions-btn',
-        'toggle-panel-schedules-btn',
+        'toggle-panel-aperture-btn', 'toggle-panel-lighting-btn', 'btn-open-materials-panel',
+        'toggle-panel-daylighting-btn', 'toggle-panel-schedules-btn',
         'toggle-panel-sensor-btn', 'toggle-panel-viewpoint-btn', 'toggle-panel-scene-btn', 'toggle-panel-energyplus-btn',
         'dock-left-sidebar-btn', 'dock-top-sidebar-btn',
         'view-controls', 'view-btn-persp', 'view-btn-ortho', 'view-btn-top', 'view-btn-front', 'view-btn-back', 'view-btn-left', 'view-btn-right', 'view-btn-quad',

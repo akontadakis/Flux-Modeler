@@ -2867,3 +2867,50 @@ body.left-sidebar-docked.ai-sidebar-open #render-container {
   margin-left: 60px;
   width: calc(100% - 60px - var(--ai-sidebar-width));
 }
+
+/* --- CUSTOM SCROLLBARS --- */
+/* Apply to all scrollable containers within panels */
+.window-content::-webkit-scrollbar,
+.scrollable-panel-inner::-webkit-scrollbar,
+.simulation-output-console::-webkit-scrollbar,
+textarea::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.window-content::-webkit-scrollbar-track,
+.scrollable-panel-inner::-webkit-scrollbar-track,
+.simulation-output-console::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track,
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.window-content::-webkit-scrollbar-thumb,
+.scrollable-panel-inner::-webkit-scrollbar-thumb,
+.simulation-output-console::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: var(--grid-color);
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.window-content::-webkit-scrollbar-thumb:hover,
+.scrollable-panel-inner::-webkit-scrollbar-thumb:hover,
+.simulation-output-console::-webkit-scrollbar-thumb:hover,
+textarea::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-secondary);
+}
+
+/* Firefox support */
+.window-content,
+.scrollable-panel-inner,
+.simulation-output-console,
+textarea,
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: var(--grid-color) transparent;
+}

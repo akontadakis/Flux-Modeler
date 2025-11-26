@@ -1,4 +1,3 @@
-
 import { getDom } from './dom.js';
 import { project } from './project.js';
 import {
@@ -93,8 +92,8 @@ function createMaterialsManagerPanel() {
     panel.id = 'panel-materials-constructions';
     panel.className = 'floating-window ui-panel resizable-panel';
 
-    panel.style.width = '700px';
-    panel.style.height = '550px';
+    panel.style.width = '600px';
+    panel.style.height = '500px';
 
     panel.innerHTML = `
         <div class="window-header">
@@ -117,7 +116,7 @@ function createMaterialsManagerPanel() {
             
             <div style="display: flex; flex: 1; overflow: hidden;">
                 <!-- Left Sidebar: List -->
-                <div style="width: 240px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
                     <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
                         <div class="flex gap-1 mb-2">
                             <button class="btn btn-xs btn-secondary flex-1 active" id="view-materials-btn">Materials</button>
@@ -190,6 +189,8 @@ function renderList(panel) {
     const view = panel.dataset.currentView;
     const { config } = getConfig(project);
 
+    listContainer.innerHTML = '';
+
     let items = [];
     if (view === 'materials') {
         items = config.materials || [];
@@ -197,77 +198,102 @@ function renderList(panel) {
         items = config.constructions || [];
     }
 
-    let html = '';
+    // "Project Defaults" item for Constructions view
+    if (view === 'constructions') {
+        const defaultItem = document.createElement('div');
+        defaultItem.className = 'list-item special-item';
+        // Match Project Setup styling exactly (no flex, no icons)
+        defaultItem.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+        defaultItem.dataset.special = 'defaults';
 
-    // Helper text
-    if (view === 'materials') {
-        html += `<div class="p-2 text-xs text-[--text-secondary] border-b border-[--grid-color] mb-2">
-            Manage EnergyPlus materials used in generated IDF files. Entries are stored in <code>energyPlusConfig.materials</code>.
-            <br><br>
-            Note: You cannot delete materials referenced by EnergyPlus constructions.
-        </div>`;
-    } else {
-        html += `<div class="p-2 text-xs text-[--text-secondary] border-b border-[--grid-color] mb-2">
-            Define constructions as ordered stacks of materials. Stored in <code>energyPlusConfig.constructions</code>.
-            <br><br>
-            Defaults control which constructions are used for walls, roofs, floors, and windows.
-        </div>`;
+        defaultItem.innerHTML = `<div class="text-xs font-semibold">Project Defaults</div>`;
 
-        // Add "Project Defaults" item
-        html += `
-            <div class="mc-item special-item" data-special="defaults" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; border-bottom: 1px solid var(--grid-color); margin-bottom: 4px;">
-                <span style="opacity: 0.7;">⚙️</span>
-                <span style="font-weight: 600;">Project Defaults</span>
-            </div>
-        `;
+        defaultItem.addEventListener('click', () => {
+            // Reset all active states
+            listContainer.querySelectorAll('.list-item').forEach(i => {
+                i.style.backgroundColor = '';
+                i.style.color = '';
+                i.classList.remove('active');
+            });
+
+            defaultItem.classList.add('active');
+            defaultItem.style.backgroundColor = 'var(--accent-color)';
+            defaultItem.style.color = 'white';
+
+            renderDefaultsEditor(panel.querySelector('#mc-editor'), panel);
+        });
+
+        defaultItem.addEventListener('mouseenter', () => {
+            if (!defaultItem.classList.contains('active')) {
+                defaultItem.style.backgroundColor = 'var(--hover-bg)';
+            }
+        });
+
+        defaultItem.addEventListener('mouseleave', () => {
+            if (!defaultItem.classList.contains('active')) {
+                defaultItem.style.backgroundColor = '';
+            }
+        });
+
+        listContainer.appendChild(defaultItem);
     }
 
     if (items.length === 0) {
-        html += `<div class="p-2 text-xs text-[--text-secondary]">No custom ${view} defined.</div>`;
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'p-2 text-xs text-[--text-secondary]';
+        emptyDiv.textContent = `No custom ${view} defined.`;
+        listContainer.appendChild(emptyDiv);
     } else {
         items.forEach((item, index) => {
-            const icon = view === 'materials' ? '🧱' : '🏗️';
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'list-item';
+            itemDiv.dataset.index = index;
+            // Match Project Setup styling exactly
+            itemDiv.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+
             // Check if default (for constructions)
             let isDefault = false;
+            let defaultTag = '';
             if (view === 'constructions') {
                 const d = config.defaults || {};
                 isDefault = (d.wallConstruction === item.name || d.roofConstruction === item.name || d.floorConstruction === item.name || d.windowConstruction === item.name);
+                if (isDefault) {
+                    defaultTag = ' <span class="text-[--accent-color]">(def)</span>';
+                }
             }
 
-            html += `
-                <div class="mc-item" data-index="${index}" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
-                    <span style="opacity: 0.7;">${icon}</span>
-                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</span>
-                    ${isDefault ? '<span class="text-[--accent-color] text-[10px] ml-auto">(def)</span>' : ''}
-                </div>
-            `;
+            itemDiv.innerHTML = `<div class="text-xs" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}${defaultTag}</div>`;
+
+            itemDiv.addEventListener('click', () => {
+                // Highlight selection
+                listContainer.querySelectorAll('.list-item').forEach(i => {
+                    i.style.backgroundColor = '';
+                    i.style.color = '';
+                    i.classList.remove('active');
+                });
+
+                itemDiv.classList.add('active');
+                itemDiv.style.backgroundColor = 'var(--accent-color)';
+                itemDiv.style.color = 'white';
+
+                renderEditor(panel, items[index], false, view, index);
+            });
+
+            itemDiv.addEventListener('mouseenter', () => {
+                if (!itemDiv.classList.contains('active')) {
+                    itemDiv.style.backgroundColor = 'var(--hover-bg)';
+                }
+            });
+
+            itemDiv.addEventListener('mouseleave', () => {
+                if (!itemDiv.classList.contains('active')) {
+                    itemDiv.style.backgroundColor = '';
+                }
+            });
+
+            listContainer.appendChild(itemDiv);
         });
     }
-
-    listContainer.innerHTML = html;
-
-    // Special items listeners
-    listContainer.querySelectorAll('.mc-item.special-item').forEach(el => {
-        el.addEventListener('click', () => {
-            listContainer.querySelectorAll('.mc-item').forEach(i => i.style.backgroundColor = '');
-            el.style.backgroundColor = 'var(--grid-color)';
-            if (el.dataset.special === 'defaults') {
-                renderDefaultsEditor(panel.querySelector('#mc-editor'), panel);
-            }
-        });
-    });
-
-    // Regular items listeners
-    listContainer.querySelectorAll('.mc-item:not(.special-item)').forEach(el => {
-        el.addEventListener('click', () => {
-            // Highlight selection
-            listContainer.querySelectorAll('.mc-item').forEach(i => i.style.backgroundColor = '');
-            el.style.backgroundColor = 'var(--grid-color)';
-
-            const index = parseInt(el.dataset.index);
-            renderEditor(panel, items[index], false, view, index);
-        });
-    });
 }
 
 function renderEditor(panel, data, isNew, view, index) {
@@ -292,7 +318,7 @@ function renderMaterialEditor(container, data, isNew, index, panel) {
         <div class="space-y-4">
             <div>
                 <label class="label">Material Type</label>
-                <select id="mat-type-select" class="w-full mt-1">
+                <select id="mat-type-select" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                     <option value="Material" ${type === 'Material' ? 'selected' : ''}>Material</option>
                     <option value="Material:NoMass" ${type === 'Material:NoMass' ? 'selected' : ''}>Material:NoMass</option>
                     <option value="Material:AirGap" ${type === 'Material:AirGap' ? 'selected' : ''}>Material:AirGap</option>
@@ -304,7 +330,7 @@ function renderMaterialEditor(container, data, isNew, index, panel) {
             
             <div>
                 <label class="label">Name</label>
-                <input type="text" id="mat-name" class="w-full mt-1" value="${name}">
+                <input type="text" id="mat-name" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${name}">
             </div>
 
             <div id="mat-dynamic-fields" class="space-y-4">
@@ -396,7 +422,7 @@ function getMaterialFields(type, data) {
         if (inputType === 'select') {
             const options = optionsOrStep;
             inputHtml = `
-                <select class="w-full mt-1" data-field="${field}">
+                <select class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" data-field="${field}">
                     ${options.map(opt => `<option value="${opt}"${opt === val ? ' selected' : ''}>${opt}</option>`).join('')}
                 </select>
             `;
@@ -411,7 +437,7 @@ function getMaterialFields(type, data) {
         } else { // number
             const step = optionsOrStep;
             inputHtml = `
-                <input type="number" step="${step}" class="w-full mt-1" data-field="${field}" value="${val !== undefined ? val : ''}">
+                <input type="number" step="${step}" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" data-field="${field}" value="${val !== undefined ? val : ''}">
             `;
         }
 
@@ -654,7 +680,7 @@ function renderDefaultsEditor(container, panel) {
     const renderSelect = (label, field, val) => `
         <div>
             <label class="label text-xs">${label}</label>
-            <select class="w-full mt-1" data-default-field="${field}">
+            <select class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" data-default-field="${field}">
                 <option value="">(none)</option>
                 ${constructionNames.map(n => `<option value="${n}"${n === val ? ' selected' : ''}>${n}</option>`).join('')}
             </select>
@@ -708,7 +734,7 @@ function renderConstructionEditor(container, data, isNew, index, panel) {
         <div class="space-y-4">
             <div>
                 <label class="label">Name</label>
-                <input type="text" id="con-name" class="w-full mt-1" value="${name}">
+                <input type="text" id="con-name" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" value="${name}">
             </div>
             
             <div class="flex justify-between items-center mt-4">
@@ -750,7 +776,7 @@ function renderConstructionEditor(container, data, isNew, index, panel) {
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2';
         div.innerHTML = `
-            <select class="w-full layer-select">
+            <select class="w-full layer-select text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 <option value="">(select material)</option>
                 ${materialNames.map(n => `<option value="${n}" ${n === val ? 'selected' : ''}>${n}</option>`).join('')}
             </select>

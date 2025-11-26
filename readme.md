@@ -2,7 +2,7 @@
 
 > **Editor's Note:** Please consider this a **beta version**. The intent is to improve it over time, but many features have not been extensively tested. If you run into a bug, your feedback would be greatly appreciated!
 
-Flux Modeler is a comprehensive desktop application providing a graphical user interface (GUI) for **EnergyPlus** building simulations. Integrated with an AI Assistant, it streamlines the entire building performance workflow—from 3D modeling to energy simulations, all the way to results visualization and compliance reporting.
+Flux Modeler is a comprehensive desktop application providing a graphical user interface (GUI) for **EnergyPlus**  building energy simulation program. Integrated with an AI Assistant, it streamlines the entire building performance workflow—from 3D modeling to energy simulations, all the way to results visualization and compliance reporting.
 
 ![Energy Modeler Welcome Screen](./Pictures/welcome_screen.png)
 

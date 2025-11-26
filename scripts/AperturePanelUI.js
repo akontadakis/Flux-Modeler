@@ -120,6 +120,7 @@ export class AperturePanelUI {
             const item = document.createElement('div');
             item.className = 'list-item';
             item.dataset.id = cat.id; // For easy selection update
+            // Match Thermostats styling
             item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
             item.innerHTML = `<div class="text-xs">${cat.label}</div>`;
 
@@ -168,9 +169,11 @@ export class AperturePanelUI {
         const listItems = this.container.querySelectorAll('#aperture-category-list .list-item');
         listItems.forEach(item => {
             if (item.dataset.id === categoryId) {
+                item.classList.add('active');
                 item.style.backgroundColor = 'var(--accent-color)';
                 item.style.color = 'white';
             } else {
+                item.classList.remove('active');
                 item.style.backgroundColor = '';
                 item.style.color = '';
             }
@@ -190,7 +193,7 @@ export class AperturePanelUI {
         const div = document.createElement('div');
         div.className = 'space-y-2 pb-3';
         div.innerHTML = `
-            <h3 class="font-semibold text-sm uppercase">Wall Selection</h3>
+            <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">Wall Selection</h3>
             <p class="info-box !text-xs !py-2 !px-3">Click a wall in the 3D view to select it.</p>
             <div class="flex justify-between items-center pt-2">
                 <span class="label">Selected Wall:</span>
@@ -222,7 +225,7 @@ export class AperturePanelUI {
         container.id = `aperture-controls-${suffix}`; // Kept for reference/compatibility if needed
         container.className = 'space-y-5'; // Removed 'hidden' and border-t, handled by parent section
 
-        container.innerHTML = `<h3 class="font-semibold text-sm uppercase">${orient.label} Wall Apertures</h3>`;
+        container.innerHTML = `<h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">${orient.label} Wall Apertures</h3>`;
 
         container.appendChild(this.createRangeControl(`win-count-${suffix}`, '# of Windows', 0, 10, 0, 1));
 
@@ -275,7 +278,7 @@ export class AperturePanelUI {
         const typeGroup = document.createElement('div');
         const select = document.createElement('select');
         select.id = `shading-type-${suffix}`;
-        select.className = 'w-full mt-1';
+        select.className = 'w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none';
         this.shadingTypes.forEach(opt => {
             const option = document.createElement('option');
             option.value = opt.value;
@@ -360,7 +363,7 @@ export class AperturePanelUI {
                 <button id="louver-placement-int-${suffix}" class="btn">Interior</button>
             </div></div>
             <div><label class="label" for="louver-slat-orientation-${suffix}">Orientation</label>
-            <select id="louver-slat-orientation-${suffix}" class="w-full mt-1">
+            <select id="louver-slat-orientation-${suffix}" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 <option value="horizontal" selected>Horizontal</option>
                 <option value="vertical">Vertical</option>
             </select></div>`;
@@ -409,7 +412,7 @@ export class AperturePanelUI {
         div.innerHTML = `
             <div>
                 <label class="label" for="shading-obj-file-${suffix}">OBJ File (.obj)</label>
-                <input type="file" id="shading-obj-file-${suffix}" accept=".obj" class="w-full text-sm">
+                <input type="file" id="shading-obj-file-${suffix}" accept=".obj" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 <span data-file-display-for="shading-obj-file-${suffix}" class="text-xs text-[--text-secondary] truncate block mt-1">No file selected.</span>
             </div>
             <h4 class="font-semibold text-xs uppercase text-[--text-secondary] pt-2">Transform</h4>
@@ -420,9 +423,9 @@ export class AperturePanelUI {
             <div>
                 <label class="label text-xs">${label}</label>
                 <div class="grid grid-cols-3 gap-2 mt-1">
-                    <input type="number" id="${paramPrefix}-x-${suffix}" value="${defVal}" step="${step}" class="param-input-num">
-                    <input type="number" id="${paramPrefix}-y-${suffix}" value="${defVal}" step="${step}" class="param-input-num">
-                    <input type="number" id="${paramPrefix}-z-${suffix}" value="${defVal}" step="${step}" class="param-input-num">
+                    <input type="number" id="${paramPrefix}-x-${suffix}" value="${defVal}" step="${step}" class="param-input-num w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
+                    <input type="number" id="${paramPrefix}-y-${suffix}" value="${defVal}" step="${step}" class="param-input-num w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
+                    <input type="number" id="${paramPrefix}-z-${suffix}" value="${defVal}" step="${step}" class="param-input-num w-full text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none">
                 </div>
             </div>`;
         };

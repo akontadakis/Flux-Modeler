@@ -20,15 +20,18 @@ import {
     openMaterialsManagerPanel,
     openConstructionsManagerPanel,
     openZoneLoadsManagerPanel,
-    openThermostatsPanel,
-    openDaylightingManagerPanel,
     openOutputsManagerPanel,
-    openOutdoorAirManagerPanel,
     openShadingManagerPanel
 } from './energyplusSidebar.js';
+import { openThermostatsPanel } from './energyplusThermostats.js';
+import {
+    openDaylightingManagerPanel
+} from './energyplusDaylighting.js';
+import { openAirflowPanel } from './energyplusAirflow.js';
 import { openSchedulesManagerPanel } from './energyplusSchedules.js';
 import { openProjectSetupPanel } from './energyplusProjectSetup.js';
 import { openGeometryPanel, initializeGeometryPanel } from './geometryPanel.js';
+import { openSimulationChecklistPanel } from './energyplusSimulationChecklist.js';
 
 // --- SHORTCUTS ---
 // Centralized object to define all keyboard shortcut actions
@@ -56,8 +59,9 @@ const shortcutActions = {
 
 
 
-    'toggleChecklistPanel': () => togglePanelVisibility('panel-checklist', 'toggle-panel-checklist-btn'),
+    'toggleChecklistPanel': () => openSimulationChecklistPanel(),
     'toggleRunPanel': () => togglePanelVisibility('panel-run', 'toggle-panel-run-btn'),
+    'toggleDaylightingPanel': () => openDaylightingManagerPanel(),
 
 
     // Other UI toggles
@@ -97,7 +101,7 @@ const keyMap = {
 
 
 
-    'Digit9': 'toggleEnergyPlusPanel',
+
     'KeyQ': 'toggleQuadView',
     'KeyV': 'toggleFpv',
     'KeyG': 'toggleGizmo',
@@ -1785,6 +1789,7 @@ const PANEL_BUTTON_MAP = {
     'panel-analysis-modules': 'toggle-analysis-btn',
     'panel-checklist': 'toggle-panel-checklist-btn',
     'panel-run': 'toggle-panel-run-btn',
+    'panel-energyplus-shading': 'toggle-panel-shading-btn',
 
 };
 
@@ -1875,13 +1880,16 @@ function setupPanelToggleButtons() {
         'toggle-panel-project-btn': 'panel-project',
         'toggle-panel-dimensions-btn': 'panel-dimensions',
         'toggle-panel-aperture-btn': 'panel-aperture',
-        'toggle-panel-materials-constructions-btn': 'panel-materials-constructions',
         'btn-open-materials-panel': 'panel-materials-constructions',
+        'toggle-panel-daylighting-btn': 'panel-energyplus-daylighting',
         'toggle-panel-schedules-btn': 'panel-energyplus-schedules',
         'toggle-panel-thermostats-btn': 'panel-energyplus-thermostats',
+        'toggle-panel-zone-loads-btn': 'panel-energyplus-zone-loads',
+        'toggle-panel-airflow-btn': 'panel-energyplus-airflow',
         'toggle-panel-checklist-btn': 'panel-checklist',
         'toggle-panel-run-btn': 'panel-run',
-        'toggle-panel-eplus-config-btn': 'panel-eplus-config',
+
+        'toggle-panel-shading-btn': 'panel-energyplus-shading',
 
         'info-button': 'panel-info'
     };
@@ -1894,6 +1902,8 @@ function setupPanelToggleButtons() {
             // Special handler for project setup button - use the imported function
             if (btnId === 'toggle-panel-project-btn') {
                 button.addEventListener('click', () => openProjectSetupPanel());
+            } else if (btnId === 'toggle-panel-checklist-btn') {
+                button.addEventListener('click', () => openSimulationChecklistPanel());
                 // Special handler for materials button - use the imported function
             } else if (btnId === 'btn-open-materials-panel') {
                 button.addEventListener('click', () => openMaterialsManagerPanel());
@@ -1903,6 +1913,15 @@ function setupPanelToggleButtons() {
                 // Special handler for thermostats button - use the imported function
             } else if (btnId === 'toggle-panel-thermostats-btn') {
                 button.addEventListener('click', () => openThermostatsPanel());
+                // Special handler for zone loads button - use the imported function
+            } else if (btnId === 'toggle-panel-zone-loads-btn') {
+                button.addEventListener('click', () => openZoneLoadsManagerPanel());
+            } else if (btnId === 'toggle-panel-airflow-btn') {
+                button.addEventListener('click', () => openAirflowPanel());
+            } else if (btnId === 'toggle-panel-daylighting-btn') {
+                button.addEventListener('click', () => openDaylightingManagerPanel());
+            } else if (btnId === 'toggle-panel-shading-btn') {
+                button.addEventListener('click', () => openShadingManagerPanel());
             } else {
                 button.addEventListener('click', () => togglePanelVisibility(panelId, btnId));
             }
@@ -6810,11 +6829,12 @@ function initializeEnergyPlusConfigPanel() {
 
     document.getElementById('open-schedules-panel-btn')?.addEventListener('click', openSchedulesManagerPanel);
     document.getElementById('open-loads-panel-btn')?.addEventListener('click', openZoneLoadsManagerPanel);
-    document.getElementById('open-thermostats-panel-btn')?.addEventListener('click', openThermostatsPanel);
-    document.getElementById('open-daylighting-panel-btn')?.addEventListener('click', openDaylightingManagerPanel);
-    document.getElementById('open-outputs-panel-btn')?.addEventListener('click', openOutputsManagerPanel);
-    document.getElementById('open-outdoor-air-panel-btn')?.addEventListener('click', openOutdoorAirManagerPanel);
-    document.getElementById('open-shading-panel-btn')?.addEventListener('click', openShadingManagerPanel);
+
+
+
+
+
+
 }
 
 /**

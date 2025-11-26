@@ -1,21 +1,27 @@
 // scripts/energyplusSidebar.js
-import { getDom } from './dom.js';
+import { getDom, setupDOM } from './dom.js';
+import { initializePanelControls } from './ui.js';
 import { project } from './project.js';
 import { resultsManager } from './resultsManager.js';
 import { validateEnergyPlusRunRequest, formatIssuesSummary } from './energyplusValidation.js';
 import { openSchedulesManagerPanel } from './energyplusSchedules.js';
 import { openMaterialsManagerPanel, openConstructionsManagerPanel } from './energyplusMaterials.js';
 import { openThermostatsPanel } from './energyplusThermostats.js';
+import {
+    getConfig,
+    setPeople,
+    setLights,
+    setElectricEquipment,
+    setGasEquipment,
+    setHotWaterEquipment,
+    setSteamEquipment,
+    setOtherEquipment
+} from './energyplusConfigService.js';
 /* EnergyPlus contextual help disabled */
 
 let dom;
 
 const recipes = {
-    "IDF Preview / Diagnostics": {
-        description: "Inspect how the current project and EnergyPlus configuration map into EnergyPlus objects. Highlights missing constructions, materials, schedules, and other issues.",
-        id: "energyplus-diagnostics",
-        isDiagnostics: true
-    },
     "Annual Energy Simulation": {
         description: "Runs a full annual energy simulation using EnergyPlus.",
         id: "annual-energy-simulation",
@@ -52,84 +58,8 @@ function initializeEnergyPlusSidebar() {
     dom = getDom();
 
     // --- 1. Simulation Checklist Panel ---
-    const checklistPanel = dom['panel-checklist'] || document.getElementById('panel-checklist');
-    if (checklistPanel) {
-        let content = checklistPanel.querySelector('.window-content');
-        if (!content) {
-            content = document.createElement('div');
-            content.className = 'window-content';
-            checklistPanel.appendChild(content);
-        }
-        content.innerHTML = `
-            <div class="window-content-inner">
-                <section class="param-section">
-                    <div class="panel-subtle" data-role="simulation-checklist-body">
-                        <div class="data-value">Evaluating project...</div>
-                    </div>
-                    <div style="margin-top: 0.35rem; display: flex; justify-content: flex-end;">
-                        <button class="btn btn-xxs btn-secondary" data-action="refresh-simulation-checklist">
-                            Refresh
-                        </button>
-                    </div>
-                </section>
-            </div>
-        `;
+    // Moved to energyplusSimulationChecklist.js
 
-        const checklistContainer = content.querySelector('[data-role="simulation-checklist-body"]');
-        if (checklistContainer) {
-            renderSimulationChecklist(checklistContainer);
-        }
-
-        const checklistRefreshBtn = content.querySelector('[data-action="refresh-simulation-checklist"]');
-        if (checklistRefreshBtn && checklistContainer) {
-            checklistRefreshBtn.addEventListener('click', () => {
-                renderSimulationChecklist(checklistContainer);
-            });
-        }
-
-        // Checklist delegated actions
-        const checklistBody = content.querySelector('[data-role="simulation-checklist-body"]');
-        if (checklistBody) {
-            checklistBody.addEventListener('click', async (ev) => {
-                const btn = ev.target.closest('[data-checklist-action]');
-                if (!btn) return;
-                ev.stopPropagation();
-                const action = btn.getAttribute('data-checklist-action');
-
-                try {
-                    const checklistActions = {
-                        'open-diagnostics': openDiagnosticsPanel,
-                        'open-materials': openMaterialsManagerPanel,
-                        'open-constructions': openConstructionsManagerPanel,
-                        'open-schedules': openSchedulesManagerPanel,
-                        'open-zone-loads': openZoneLoadsManagerPanel,
-                        'open-ideal-loads': openThermostatsPanel,
-                        'open-daylighting': openDaylightingManagerPanel,
-                        'open-outputs': openOutputsManagerPanel,
-                        'open-weather-location': openWeatherLocationManagerPanel,
-                        'open-sim-control': openSimulationControlManagerPanel,
-                        'open-annual': () => openRecipePanel(recipes['Annual Energy Simulation']),
-                        'open-heating-dd': () => openRecipePanel(recipes['Heating Design Day']),
-                        'open-cooling-dd': () => openRecipePanel(recipes['Cooling Design Day']),
-                    };
-
-                    if (checklistActions[action]) {
-                        await Promise.resolve(checklistActions[action]());
-                    } else if (action === 'generate-idf') {
-                        const { generateAndStoreIdf } = await import('./energyplus.js');
-                        await generateAndStoreIdf();
-                        alert('IDF generated and stored as model.idf');
-                        if (checklistContainer) {
-                            renderSimulationChecklist(checklistContainer);
-                        }
-                    }
-                } catch (err) {
-                    console.error('Simulation Checklist action failed:', err);
-                    alert('Simulation Checklist action failed. Check console for details.');
-                }
-            });
-        }
-    }
 
     // --- 2. Run Simulation Panel ---
     const runPanel = dom['panel-run'] || document.getElementById('panel-run');
@@ -141,20 +71,27 @@ function initializeEnergyPlusSidebar() {
             runPanel.appendChild(content);
         }
         content.innerHTML = `
-            <div class="window-content-inner">
-                <section class="param-section">
-                    <div class="recipe-list"></div>
-                </section>
-                <p class="info-box" style="margin-top: 0.75rem;">
-                    <strong>HVAC scope:</strong> Ray-Modeler generates models using
-                    <code>ZoneHVAC:IdealLoadsAirSystem</code>. Detailed Air/PlantLoop systems are not generated.
-                </p>
+            <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+                <div style="display: flex; flex: 1; overflow: hidden;">
+                    <!-- Left Sidebar: Recipe List -->
+                    <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                        <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
+                            <span class="label">Simulation Recipes</span>
+                        </div>
+                        <div id="recipe-sidebar-list" class="scrollable-panel-inner" style="flex: 1; overflow-y: auto;">
+                            <!-- Recipe items will be inserted here -->
+                        </div>
+                    </div>
+
+                    <!-- Right Content: Recipe Editor -->
+                    <div id="recipe-content" style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="text-[--text-secondary] text-sm text-center mt-10">Select a recipe to configure.</div>
+                    </div>
+                </div>
             </div>
         `;
         populateRecipeList();
     }
-
-
 }
 
 /**
@@ -162,419 +99,560 @@ function initializeEnergyPlusSidebar() {
  * Provides a guided 1→7 workflow status derived from current project metadata and diagnostics.
  */
 
-async function computeSimulationChecklist() {
-    // Helper to read meta and energyPlusConfig safely
-    const safeGetMeta = () => {
-        try {
-            return (typeof project.getMetadata === 'function' && project.getMetadata()) || project.metadata || {};
-        } catch (e) {
-            console.warn('SimulationChecklist: failed to read project metadata', e);
-            return {};
-        }
-    };
 
-    const meta = safeGetMeta();
-    const ep = meta.energyPlusConfig || meta.energyplus || {};
-    const weather = ep.weather || {};
-    const simControl = ep.simulationControl || {};
-
-    // Try to pull diagnostics; fall back to null if unavailable.
-    let diagnostics = null;
-    try {
-        const { generateEnergyPlusDiagnostics } = await import('./energyplus.js');
-        diagnostics = await generateEnergyPlusDiagnostics();
-    } catch (err) {
-        console.debug('SimulationChecklist: diagnostics unavailable or failed', err);
-    }
-
-    const issues = (diagnostics && diagnostics.issues) || [];
-
-    const hasFatalIssues = issues.some((i) => i.severity === 'error');
-    const hasWarnings = issues.some((i) => i.severity === 'warning');
-
-    const geometry = diagnostics && diagnostics.geometry;
-    const constructionsDiag = diagnostics && diagnostics.constructions;
-    const materialsDiag = diagnostics && diagnostics.materials;
-    const schedLoadsDiag = diagnostics && diagnostics.schedulesAndLoads;
-
-    // Quick helpers
-    const hasZones =
-        (geometry && geometry.totals && geometry.totals.zones > 0) ||
-        (typeof project.getZones === 'function' && (project.getZones() || []).length > 0) ||
-        (Array.isArray(project.zones) && project.zones.length > 0);
-
-    const missingCons = (constructionsDiag && constructionsDiag.missingConstructions) || [];
-    const missingMats = (materialsDiag && materialsDiag.missingMaterials) || [];
-    const missingScheds = (schedLoadsDiag && schedLoadsDiag.missingSchedules) || [];
-    const inconsistentLoads = (schedLoadsDiag && schedLoadsDiag.inconsistentLoads) || [];
-
-    const epwPath = weather.epwPath || ep.weatherFilePath || null;
-    const locationSource = weather.locationSource || 'FromEPW';
-    const cl = weather.customLocation || null;
-
-    const validateCustomLocation = () => {
-        if (!cl) return false;
-        const { name, latitude, longitude, timeZone, elevation } = cl;
-        if (!name) return false;
-        if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return false;
-        if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return false;
-        if (!Number.isFinite(timeZone) || timeZone < -12 || timeZone > 14) return false;
-        if (!Number.isFinite(elevation)) return false;
-        return true;
-    };
-
-    // Step 1: Geometry
-    const step1 = (() => {
-        if (hasZones) {
-            return {
-                id: 'geometry',
-                label: '1. Geometry',
-                status: 'ok',
-                description: 'Project zones detected.',
-                actions: [{ label: 'Open Diagnostics', actionId: 'open-diagnostics' }],
-            };
-        }
-        return {
-            id: 'geometry',
-            label: '1. Geometry',
-            status: 'warning',
-            description: 'No explicit zones found. IDF will fall back to a default Zone_1.',
-            actions: [{ label: 'Open Diagnostics', actionId: 'open-diagnostics' }],
-        };
-    })();
-
-    // Step 2: Constructions & Materials
-    const step2 = (() => {
-        if (missingCons.length || missingMats.length) {
-            return {
-                id: 'constructions',
-                label: '2. Constructions & Materials',
-                status: 'error',
-                description: 'Missing constructions or materials referenced by the model.',
-                actions: [
-                    { label: 'Open Constructions', actionId: 'open-constructions' },
-                    { label: 'Open Materials', actionId: 'open-materials' },
-                    { label: 'Diagnostics', actionId: 'open-diagnostics' },
-                ],
-            };
-        }
-        const hasAny =
-            (Array.isArray(ep.constructions) && ep.constructions.length) ||
-            (Array.isArray(ep.materials) && ep.materials.length);
-        return {
-            id: 'constructions',
-            label: '2. Constructions & Materials',
-            status: hasAny ? 'ok' : 'warning',
-            description: hasAny
-                ? 'Constructions and materials configured or using built-ins.'
-                : 'Using built-in defaults only. Review for project-specific envelopes.',
-            actions: [
-                { label: 'Open Constructions', actionId: 'open-constructions' },
-                { label: 'Open Materials', actionId: 'open-materials' },
-            ],
-        };
-    })();
-
-    // Step 3: Schedules & Zone Loads
-    const step3 = (() => {
-        if (missingScheds.length || inconsistentLoads.length) {
-            return {
-                id: 'schedules-loads',
-                label: '3. Schedules & Zone Loads',
-                status: 'warning',
-                description: 'Some schedules or zone loads may be missing or inconsistent.',
-                actions: [
-                    { label: 'Open Schedules', actionId: 'open-schedules' },
-                    { label: 'Open Zone Loads', actionId: 'open-zone-loads' },
-                    { label: 'Diagnostics', actionId: 'open-diagnostics' },
-                ],
-            };
-        }
-        const hasZoneLoads = Array.isArray(ep.zoneLoads) && ep.zoneLoads.length > 0;
-        return {
-            id: 'schedules-loads',
-            label: '3. Schedules & Zone Loads',
-            status: hasZoneLoads ? 'ok' : 'warning',
-            description: hasZoneLoads
-                ? 'Zone loads and schedules configured.'
-                : 'No explicit zone loads defined. Results may under-estimate internal gains.',
-            actions: [
-                { label: 'Open Schedules', actionId: 'open-schedules' },
-                { label: 'Open Zone Loads', actionId: 'open-zone-loads' },
-            ],
-        };
-    })();
-
-    // Step 4: Thermostats & Ideal Loads
-    const step4 = (() => {
-        const hasThermostats = Array.isArray(ep.thermostats) && ep.thermostats.length > 0;
-        const hasIdealLoads =
-            (ep.idealLoads && ep.idealLoads.global) ||
-            (ep.idealLoads && Array.isArray(ep.idealLoads.perZone) && ep.idealLoads.perZone.length > 0);
-
-        if (hasThermostats && hasIdealLoads) {
-            return {
-                id: 'thermostats-ideal-loads',
-                label: '4. Thermostats & Ideal Loads',
-                status: 'ok',
-                description: 'Thermostats and IdealLoads configured. HVAC modeled via IdealLoads.',
-                actions: [{ label: 'Thermostats & IdealLoads', actionId: 'open-ideal-loads' }],
-            };
-        }
-
-        return {
-            id: 'thermostats-ideal-loads',
-            label: '4. Thermostats & Ideal Loads',
-            status: 'warning',
-            description:
-                'No complete thermostat/IdealLoads configuration detected. Zones may free-float or be unconstrained.',
-            actions: [{ label: 'Thermostats & IdealLoads', actionId: 'open-ideal-loads' }],
-        };
-    })();
-
-    // Step 5: Weather & Location
-    const step5 = (() => {
-        const actions = [{ label: 'Weather & Location', actionId: 'open-weather-location' }];
-
-        if (!epwPath) {
-            return {
-                id: 'weather-location',
-                label: '5. Weather & Location',
-                status: 'error',
-                description:
-                    'No EPW selected. Annual/design-day simulations cannot run reliably without a project EPW.',
-                actions,
-            };
-        }
-
-        if (locationSource === 'Custom' && !validateCustomLocation()) {
-            return {
-                id: 'weather-location',
-                label: '5. Weather & Location',
-                status: 'error',
-                description: 'Custom location selected but fields are incomplete or invalid.',
-                actions,
-            };
-        }
-
-        return {
-            id: 'weather-location',
-            label: '5. Weather & Location',
-            status: 'ok',
-            description:
-                locationSource === 'Custom'
-                    ? 'EPW set and custom location defined.'
-                    : 'EPW set. Location derived from EPW.',
-            actions,
-        };
-    })();
-
-    // Step 6: IDF Generation readiness
-    const step6 = (() => {
-        if (hasFatalIssues || missingCons.length || missingMats.length) {
-            return {
-                id: 'idf-generation',
-                label: '6. IDF Generation',
-                status: 'error',
-                description:
-                    'Diagnostics report blocking issues (e.g., missing constructions/materials). Fix before generating IDF.',
-                actions: [
-                    { label: 'Diagnostics', actionId: 'open-diagnostics' },
-                    { label: 'Generate IDF', actionId: 'generate-idf' },
-                ],
-            };
-        }
-
-        if (hasWarnings || missingScheds.length || inconsistentLoads.length) {
-            return {
-                id: 'idf-generation',
-                label: '6. IDF Generation',
-                status: 'warning',
-                description:
-                    'IDF can be generated, but diagnostics report warnings (e.g., schedules/loads). Review before final runs.',
-                actions: [
-                    { label: 'Diagnostics', actionId: 'open-diagnostics' },
-                    { label: 'Generate IDF', actionId: 'generate-idf' },
-                ],
-            };
-        }
-
-        return {
-            id: 'idf-generation',
-            label: '6. IDF Generation',
-            status: 'ok',
-            description: 'Configuration is consistent. Generate IDF from the current project.',
-            actions: [{ label: 'Generate IDF', actionId: 'generate-idf' }],
-        };
-    })();
-
-    // Step 7: Run EnergyPlus readiness
-    const step7 = (() => {
-        const actions = [
-            { label: 'Annual', actionId: 'open-annual' },
-            { label: 'Heating DD', actionId: 'open-heating-dd' },
-            { label: 'Cooling DD', actionId: 'open-cooling-dd' },
-        ];
-
-        if (!epwPath) {
-            return {
-                id: 'run-energyplus',
-                label: '7. Run EnergyPlus',
-                status: 'error',
-                description: 'Cannot run: EPW is missing. Configure in Weather & Location.',
-                actions: [{ label: 'Weather & Location', actionId: 'open-weather-location' }],
-            };
-        }
-
-        if (hasFatalIssues || missingCons.length || missingMats.length) {
-            return {
-                id: 'run-energyplus',
-                label: '7. Run EnergyPlus',
-                status: 'error',
-                description: 'Cannot run safely: diagnostics report blocking IDF issues.',
-                actions: [
-                    { label: 'Diagnostics', actionId: 'open-diagnostics' },
-                    { label: 'Constructions', actionId: 'open-constructions' },
-                    { label: 'Materials', actionId: 'open-materials' },
-                ],
-            };
-        }
-
-        const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
-
-        if (!isElectron) {
-            return {
-                id: 'run-energyplus',
-                label: '7. Run EnergyPlus',
-                status: 'warning',
-                description:
-                    'Electron bridge not detected. You can generate IDF/scripts but cannot run EnergyPlus directly here.',
-                actions: [
-                    { label: 'Annual', actionId: 'open-annual' },
-                    { label: 'Heating DD', actionId: 'open-heating-dd' },
-                    { label: 'Cooling DD', actionId: 'open-cooling-dd' },
-                ],
-            };
-        }
-
-        return {
-            id: 'run-energyplus',
-            label: '7. Run EnergyPlus',
-            status: hasWarnings ? 'warning' : 'ok',
-            description: hasWarnings
-                ? 'Ready to run via Electron; diagnostics report warnings to review.'
-                : 'Ready to run EnergyPlus via Electron recipes.',
-            actions,
-        };
-    })();
-
-    return [step1, step2, step3, step4, step5, step6, step7];
-}
-
-function renderSimulationChecklist(container) {
-    container.innerHTML = `
-        <div class="text-sm text-[--text-secondary]">
-            Evaluating project configuration...
-        </div>
-    `;
-
-    computeSimulationChecklist()
-        .then((items) => {
-            if (!items || !items.length) {
-                container.innerHTML = `
-                    <div class="text-sm text-red-400">
-                        Failed to evaluate checklist.
-                    </div>
-                `;
-                return;
-            }
-
-            const icon = (status) => {
-                const base = 'status-dot';
-                if (status === 'ok') return `<span class="${base}" style="background-color: var(--status-ok); margin-right: 6px;"></span>`;
-                if (status === 'warning') return `<span class="${base}" style="background-color: var(--status-warn); margin-right: 6px;"></span>`;
-                return `<span class="${base}" style="background-color: var(--status-error); margin-right: 6px;"></span>`;
-            };
-
-            const html = items
-                .map((item) => {
-                    const actions =
-                        item.actions && item.actions.length
-                            ? item.actions
-                                .map(
-                                    (a) =>
-                                        `<button class="btn btn-xxs btn-secondary ml-1" data-checklist-action="${a.actionId}">${a.label}</button>`
-                                )
-                                .join('')
-                            : '';
-                    return `
-                        <div style="padding: 0.25rem 0; border-bottom: 1px solid var(--grid-color);">
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.25rem;">
-                                <div style="display:flex; align-items:center; min-width:0;">
-                                    ${icon(item.status)}
-                                    <span class="data-value" style="font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                        ${item.label}
-                                    </span>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:0.25rem;">
-                                    ${actions}
-                                </div>
-                            </div>
-                            <div style="margin-left:18px; margin-top:2px; font-size:0.8rem; color:var(--text-secondary);">
-                                ${item.description || ''}
-                            </div>
-                        </div>
-                    `;
-                })
-                .join('');
-
-            container.innerHTML = html;
-        })
-        .catch((err) => {
-            console.error('SimulationChecklist: render failed', err);
-            container.innerHTML = `
-                <div class="text-sm text-red-400">
-                    Failed to evaluate checklist. Check console for details.
-                </div>
-            `;
-        });
-}
 
 function populateRecipeList() {
-    const recipeList = dom['panel-run']?.querySelector('.recipe-list');
-    if (!recipeList) return;
+    const sidebarList = dom['panel-run']?.querySelector('#recipe-sidebar-list');
+    if (!sidebarList) return;
 
-    recipeList.innerHTML = '';
+    sidebarList.innerHTML = '';
+
     for (const name in recipes) {
         const recipe = recipes[name];
-        const button = document.createElement('button');
-        button.className = 'btn btn-sm btn-secondary';
-        button.style.width = '100%';
-        button.style.justifyContent = 'flex-start';
-        button.style.flexDirection = 'column';
-        button.style.alignItems = 'flex-start';
-        button.style.gap = '2px';
-        button.style.padding = '0.4rem 0.6rem';
-        button.innerHTML = `
-            <div class="data-value" style="font-size:0.9rem; font-weight:600;">${name}</div>
-            <div style="font-size:0.8rem; font-weight:400; color:var(--text-secondary); white-space:normal;">
-                ${recipe.description}
-            </div>
-        `;
-        button.onclick = () => {
+        const item = document.createElement('div');
+        item.className = 'tstat-item';
+        item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+        item.dataset.recipeName = name;
+        item.innerHTML = `<div class="text-xs">${name}</div>`;
+
+        // Hover effects
+        item.addEventListener('mouseenter', () => {
+            if (!item.classList.contains('active')) {
+                item.style.backgroundColor = 'var(--hover-bg)';
+            }
+        });
+        item.addEventListener('mouseleave', () => {
+            if (!item.classList.contains('active')) {
+                item.style.backgroundColor = '';
+            }
+        });
+
+        // Click handler
+        item.addEventListener('click', () => {
+            // Reset all items
+            sidebarList.querySelectorAll('.tstat-item').forEach(el => {
+                el.classList.remove('active');
+                el.style.backgroundColor = '';
+                el.style.color = '';
+            });
+
+            // Set active state
+            item.classList.add('active');
+            item.style.backgroundColor = 'var(--accent-color)';
+            item.style.color = 'white';
+
+            // Render content
             if (recipe.isDiagnostics) {
                 openDiagnosticsPanel();
             } else {
-                openRecipePanel(recipe);
+                renderRecipeContent(recipe, name);
             }
-        };
-        recipeList.appendChild(button);
+        });
+
+        sidebarList.appendChild(item);
+    }
+
+    // Add Configuration Section
+    const configHeader = document.createElement('div');
+    configHeader.style.cssText = 'padding: 0.5rem; border-bottom: 1px solid var(--grid-color); margin-top: 1rem;';
+    configHeader.innerHTML = '<span class="label">Configuration</span>';
+    sidebarList.appendChild(configHeader);
+
+    const outputsItem = document.createElement('div');
+    outputsItem.className = 'tstat-item';
+    outputsItem.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+    outputsItem.dataset.section = 'outputs';
+    outputsItem.innerHTML = '<div class="text-xs">Outputs</div>';
+
+    outputsItem.addEventListener('mouseenter', () => {
+        if (!outputsItem.classList.contains('active')) outputsItem.style.backgroundColor = 'var(--hover-bg)';
+    });
+    outputsItem.addEventListener('mouseleave', () => {
+        if (!outputsItem.classList.contains('active')) outputsItem.style.backgroundColor = '';
+    });
+
+    outputsItem.addEventListener('click', () => {
+        sidebarList.querySelectorAll('.tstat-item').forEach(el => {
+            el.classList.remove('active');
+            el.style.backgroundColor = '';
+            el.style.color = '';
+        });
+        outputsItem.classList.add('active');
+        outputsItem.style.backgroundColor = 'var(--accent-color)';
+        outputsItem.style.color = 'white';
+        renderOutputsContent();
+    });
+
+    sidebarList.appendChild(outputsItem);
+}
+
+function renderRecipeContent(recipe, name) {
+    const contentArea = dom['panel-run']?.querySelector('#recipe-content');
+    if (!contentArea) return;
+
+    const isAnnual = recipe.id === 'annual-energy-simulation';
+    const isHeating = recipe.id === 'heating-design-day';
+    const isCooling = recipe.id === 'cooling-design-day';
+
+    function getProjectEpwPath() {
+        try {
+            const meta = (typeof project.getMetadata === 'function' && project.getMetadata()) || project.metadata || {};
+            const ep = meta.energyPlusConfig || meta.energyplus || {};
+            const weather = ep.weather || {};
+            return weather.epwPath || ep.weatherFilePath || null;
+        } catch (e) {
+            console.warn('EnergyPlus: failed to read project-level EPW', e);
+            return null;
+        }
+    }
+
+    function getRunName() {
+        if (isAnnual) return 'annual';
+        if (isHeating) return 'heating-design';
+        if (isCooling) return 'cooling-design';
+        return recipe.id || 'custom';
+    }
+
+    let paramsHtml = '';
+    recipe.params.forEach((param) => {
+        paramsHtml += `
+            <div>
+                <label class="label">${param.name}</label>
+                <input type="${param.type}" id="${param.id}" ${param.accept ? `accept="${param.accept}"` : ''} class="w-full mt-1">
+            </div>
+        `;
+    });
+
+    contentArea.innerHTML = `
+        <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">
+            ${name}
+        </h3>
+        
+        <p class="text-xs text-[--text-secondary]">${recipe.description}</p>
+        
+        ${isAnnual ? `
+        <div class="p-2 border border-[--grid-color] rounded bg-black/20">
+            <button class="btn btn-sm btn-secondary w-full" data-action="generate-idf-from-project">
+                Generate IDF from Project
+            </button>
+            <p class="text-xs text-[--text-secondary] mt-1">
+                Writes <code>model.idf</code> based on current configuration.
+            </p>
+        </div>
+        ` : ''}
+
+        <div class="space-y-4">
+            <h4 class="font-semibold text-xs uppercase text-[--text-secondary]">Simulation Parameters</h4>
+            ${paramsHtml}
+            
+            ${isAnnual ? `
+            <div class="text-xs text-[--text-secondary]">
+                Project EPW: <span data-role="project-epw-label" class="text-[--accent-color]">(resolving...)</span>
+            </div>
+            ` : ''}
+            
+            ${isHeating || isCooling ? `
+            <p class="text-xs text-[--text-secondary]">
+                Reuses selected IDF (or <code>model.idf</code>). Ensure <code>SimulationControl</code> and <code>SizingPeriod</code> are set.
+                Runs in <code>runs/${isHeating ? 'heating-design' : 'cooling-design'}</code>.
+            </p>
+            ` : ''}
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-[--grid-color]">
+            <button class="btn btn-sm btn-primary" data-action="run">Run Simulation</button>
+        </div>
+        
+        <div class="mt-2">
+             <h5 class="font-semibold text-xs uppercase text-[--text-secondary] mb-1">Output Console</h5>
+             <pre class="simulation-output-console w-full h-32 font-mono text-xs p-2 rounded bg-[--grid-color] border border-gray-500/50 overflow-y-auto whitespace-pre-wrap"></pre>
+        </div>
+    `;
+
+    // Update EPW label
+    if (isAnnual) {
+        const projectEpwLabel = contentArea.querySelector('[data-role="project-epw-label"]');
+        if (projectEpwLabel) {
+            const epw = getProjectEpwPath();
+            projectEpwLabel.textContent = epw || '(not set)';
+        }
+    }
+
+    // Wire up generate button
+    const generateBtn = contentArea.querySelector('[data-action="generate-idf-from-project"]');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', async () => {
+            const outputConsole = contentArea.querySelector('.simulation-output-console');
+            try {
+                const { generateAndStoreIdf } = await import('./energyplus.js');
+                await generateAndStoreIdf();
+                if (outputConsole) {
+                    outputConsole.textContent = 'IDF generated and stored as model.idf\n';
+                }
+            } catch (err) {
+                console.error('EnergyPlus: failed to generate IDF from project', err);
+                if (outputConsole) {
+                    outputConsole.textContent += `Error generating IDF: ${err.message}\n`;
+                }
+                alert('Failed to generate IDF from project. Check console for details.');
+            }
+        });
+    }
+
+    // Wire up run button
+    const runBtn = contentArea.querySelector('[data-action="run"]');
+    if (runBtn) {
+        let epOutputListener = null;
+        let epExitListener = null;
+
+        runBtn.addEventListener('click', () => {
+            const outputConsole = contentArea.querySelector('.simulation-output-console');
+
+            if (!window.electronAPI) {
+                if (outputConsole) {
+                    outputConsole.textContent += 'Electron environment not detected. Please run via Electron or use the generated IDF/scripts.\n';
+                }
+                alert('EnergyPlus can only be run directly inside the Electron app. In browser, use the generated IDF/scripts manually.');
+                return;
+            }
+
+            const idfInput = contentArea.querySelector('#idf-file');
+            const epwInput = contentArea.querySelector('#epw-file');
+            const exeInput = contentArea.querySelector('#eplus-exe');
+
+            const idfPath = idfInput && idfInput.files && idfInput.files[0] ? idfInput.files[0].path || idfInput.files[0].name : 'model.idf';
+
+            const explicitEpw = epwInput && epwInput.files && epwInput.files[0] ? epwInput.files[0].path || epwInput.files[0].name : null;
+            const projectEpw = getProjectEpwPath();
+            const epwPath = explicitEpw || projectEpw || null;
+
+            const energyPlusPath = exeInput && exeInput.value ? exeInput.value.trim() : null;
+
+            if (!epwPath) {
+                alert('No EPW specified. Select an EPW here or configure a project-level EPW in the "Weather & Location" panel.');
+                return;
+            }
+
+            if (!energyPlusPath) {
+                alert('Specify the EnergyPlus executable path.');
+                return;
+            }
+
+            const runName = getRunName();
+            const runId = `${runName}-${Date.now()}`;
+
+            const preRun = validateEnergyPlusRunRequest({
+                idfPath,
+                epwPath,
+                energyPlusPath,
+                recipeId: recipe.id,
+            });
+
+            if (!preRun.ok) {
+                const summary = formatIssuesSummary(preRun.issues, 4);
+                if (outputConsole) {
+                    outputConsole.textContent += 'Pre-run validation failed:\n' + (summary || 'Blocking configuration issues detected.') + '\n\n';
+                    outputConsole.scrollTop = outputConsole.scrollHeight;
+                }
+                alert('Cannot start EnergyPlus run due to configuration issues.\n\n' + (summary || 'Check the EnergyPlus sidebar configuration and diagnostics.'));
+                return;
+            }
+
+            resultsManager.registerEnergyPlusRun(runId, {
+                label: `EnergyPlus ${runName}`,
+                recipeId: recipe.id,
+            });
+
+            if (outputConsole) {
+                outputConsole.textContent = `Running EnergyPlus [${runName}]...\nIDF: ${idfPath}\nEPW: ${epwPath}\nExe: ${energyPlusPath}\nOutputs: runs/${runName}/ (if supported by Electron bridge)\n\n`;
+            }
+
+            if (window.electronAPI.offEnergyPlusOutput && epOutputListener) {
+                window.electronAPI.offEnergyPlusOutput(epOutputListener);
+                epOutputListener = null;
+            }
+            if (window.electronAPI.offEnergyPlusExit && epExitListener) {
+                window.electronAPI.offEnergyPlusExit(epExitListener);
+                epExitListener = null;
+            }
+
+            const runOptions = {
+                idfPath,
+                epwPath,
+                energyPlusPath,
+                runName,
+                runId,
+            };
+
+            window.electronAPI.runEnergyPlus(runOptions);
+
+            const handleOutput = (payload) => {
+                if (!outputConsole) return;
+                let text = '';
+                if (payload && typeof payload === 'object' && typeof payload.chunk === 'string') {
+                    if (payload.runId && payload.runId !== runId) return;
+                    text = payload.chunk;
+                } else {
+                    text = String(payload ?? '');
+                }
+                if (!text) return;
+                outputConsole.textContent += text;
+                outputConsole.scrollTop = outputConsole.scrollHeight;
+            };
+
+            const handleExit = (payload) => {
+                if (payload && typeof payload === 'object' && payload.runId && payload.runId !== runId) return;
+
+                const code = typeof payload === 'object' && payload !== null ? (typeof payload.exitCode === 'number' ? payload.exitCode : 0) : (typeof payload === 'number' ? payload : 0);
+                const resolvedRunId = (payload && typeof payload === 'object' && payload.runId) || runId;
+                const baseDir = payload && typeof payload === 'object' ? payload.outputDir : undefined;
+                const errContent = payload && typeof payload === 'object' ? payload.errContent : undefined;
+                const csvContents = payload && typeof payload === 'object' ? payload.csvContents : undefined;
+
+                const runRecord = resultsManager.parseEnergyPlusResults(resolvedRunId, {
+                    baseDir,
+                    errContent,
+                    csvContents,
+                    statusFromRunner: code,
+                });
+
+                if (outputConsole) {
+                    outputConsole.textContent += `\n--- EnergyPlus exited with code: ${code} ---\n`;
+                    if (runRecord && runRecord.errors) {
+                        const { fatal, severe, warning } = runRecord.errors;
+                        const lines = [];
+                        if (fatal.length) {
+                            lines.push(`Fatal errors: ${fatal.length}`);
+                            lines.push(fatal[0]);
+                        }
+                        if (severe.length) {
+                            lines.push(`Severe errors: ${severe.length}`);
+                            if (!fatal.length) lines.push(severe[0]);
+                        }
+                        if (warning.length) lines.push(`Warnings: ${warning.length}`);
+                        if (lines.length) outputConsole.textContent += lines.join('\n') + '\n';
+                    }
+                    outputConsole.scrollTop = outputConsole.scrollHeight;
+                }
+
+                if (window.electronAPI.offEnergyPlusOutput && epOutputListener) {
+                    window.electronAPI.offEnergyPlusOutput(epOutputListener);
+                    epOutputListener = null;
+                }
+                if (window.electronAPI.offEnergyPlusExit && epExitListener) {
+                    window.electronAPI.offEnergyPlusExit(epExitListener);
+                    epExitListener = null;
+                }
+            };
+
+            if (window.electronAPI.onEnergyPlusOutput) {
+                epOutputListener = window.electronAPI.onEnergyPlusOutput(handleOutput);
+            }
+            if (window.electronAPI.onceEnergyPlusExit) {
+                epExitListener = window.electronAPI.onceEnergyPlusExit(handleExit);
+            } else if (window.electronAPI.onEnergyPlusExit) {
+                epExitListener = window.electronAPI.onEnergyPlusExit(handleExit);
+            }
+        });
     }
 }
 
+function renderOutputsContent() {
+    const contentArea = dom['panel-run']?.querySelector('#recipe-content');
+    if (!contentArea) return;
+
+    contentArea.innerHTML = `
+        <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">
+            Output Variables
+        </h3>
+        
+        <p class="text-xs text-[--text-secondary] mb-4">
+            Configure <code>Output:Variable</code> entries.
+            Settings are stored in <code>energyPlusConfig.daylighting.outputs.variables</code>.
+        </p>
+
+        <div class="flex justify-between items-center mb-2">
+            <span class="font-semibold text-xs uppercase text-[--text-secondary]">Variables List</span>
+            <button class="btn btn-xxs btn-secondary" data-action="add-output-var">+ Add Variable</button>
+        </div>
+
+        <div class="border border-gray-700/70 rounded bg-black/40 max-h-96 overflow-y-auto scrollable-panel-inner mb-2">
+            <table class="w-full text-xs">
+                <thead class="bg-black/40 sticky top-0">
+                    <tr>
+                        <th class="px-2 py-1 text-left">Key</th>
+                        <th class="px-2 py-1 text-left">Variable Name</th>
+                        <th class="px-2 py-1 text-left">Frequency</th>
+                        <th class="px-2 py-1 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="outputs-vars-tbody"></tbody>
+            </table>
+        </div>
+
+        <div class="text-xs text-[--text-secondary] mb-4">
+            Examples: Key = zone name or "Environment"; Variable = "Zone Lights Electric Power"; Frequency = Hourly/RunPeriod/etc.
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4 border-t border-[--grid-color]">
+            <button class="btn btn-sm btn-primary" data-action="save-outputs">Save Outputs</button>
+        </div>
+    `;
+
+    const tbody = contentArea.querySelector('.outputs-vars-tbody');
+    const addBtn = contentArea.querySelector('[data-action="add-output-var"]');
+    const saveBtn = contentArea.querySelector('[data-action="save-outputs"]');
+
+    function getState() {
+        const meta = (typeof project.getMetadata === 'function' && project.getMetadata()) || project.metadata || {};
+        const ep = meta.energyPlusConfig || meta.energyplus || {};
+        const daylighting = ep.daylighting || {};
+        const outputs = daylighting.outputs || {};
+        const vars = Array.isArray(outputs.variables) ? outputs.variables.slice() : [];
+        return { meta, ep, daylighting, vars };
+    }
+
+    function render() {
+        const { vars } = getState();
+        tbody.innerHTML = '';
+
+        if (!vars.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-2 py-2 text-xs text-[--text-secondary] italic text-center" colspan="4">
+                    No Output:Variable entries defined.
+                </td>
+            `;
+            tbody.appendChild(tr);
+            return;
+        }
+
+        vars.forEach((v, index) => {
+            const tr = document.createElement('tr');
+            tr.dataset.index = String(index);
+            tr.className = 'border-b border-white/5 last:border-0';
+            tr.innerHTML = `
+                <td class="px-2 py-1 align-top">
+                    <input class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="key" value="${v.key || ''}" placeholder="*">
+                </td>
+                <td class="px-2 py-1 align-top">
+                    <input class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="variableName" value="${v.variableName || ''}" placeholder="Variable Name">
+                </td>
+                <td class="px-2 py-1 align-top">
+                    <select class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="freq">
+                        ${['Timestep', 'Hourly', 'Daily', 'Monthly', 'RunPeriod'].map((f) => `
+                            <option value="${f}"${(v.reportingFrequency || 'Hourly') === f ? ' selected' : ''}>${f}</option>
+                        `).join('')}
+                    </select>
+                </td>
+                <td class="px-2 py-1 align-top text-right">
+                    <button class="text-red-400 hover:text-red-300" data-action="delete-var">×</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('button[data-action="delete-var"]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const row = btn.closest('tr');
+                if (row) row.remove();
+            });
+        });
+    }
+
+    function addRow() {
+        // Clear "No entries" message if present
+        if (tbody.querySelector('td[colspan="4"]')) {
+            tbody.innerHTML = '';
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-white/5 last:border-0';
+        tr.innerHTML = `
+            <td class="px-2 py-1 align-top">
+                <input class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="key" placeholder="Key (zone name, Environment, *)">
+            </td>
+            <td class="px-2 py-1 align-top">
+                <input class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="variableName" placeholder="Variable Name">
+            </td>
+            <td class="px-2 py-1 align-top">
+                <select class="w-full text-xs bg-transparent border-none focus:ring-0 p-0" data-field="freq">
+                    <option value="Hourly" selected>Hourly</option>
+                    <option value="Timestep">Timestep</option>
+                    <option value="Daily">Daily</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="RunPeriod">RunPeriod</option>
+                </select>
+            </td>
+            <td class="px-2 py-1 align-top text-right">
+                <button class="text-red-400 hover:text-red-300" data-action="delete-var">×</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        tr.querySelector('[data-action="delete-var"]').addEventListener('click', () => {
+            tr.remove();
+            if (tbody.children.length === 0) render(); // Show empty message again
+        });
+    }
+
+    addBtn.addEventListener('click', addRow);
+
+    saveBtn.addEventListener('click', async () => {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const newVars = [];
+        rows.forEach((tr) => {
+            if (tr.querySelector('td[colspan="4"]')) return; // Skip empty message
+
+            const key = tr.querySelector('[data-field="key"]')?.value.trim();
+            const variableName = tr.querySelector('[data-field="variableName"]')?.value.trim();
+            const freq = tr.querySelector('[data-field="freq"]')?.value;
+
+            if (key && variableName) {
+                newVars.push({
+                    key,
+                    variableName,
+                    reportingFrequency: freq,
+                });
+            }
+        });
+
+        const { meta, ep, daylighting } = getState();
+
+        // Ensure structure exists
+        if (!meta.energyPlusConfig) meta.energyPlusConfig = {};
+        if (!meta.energyPlusConfig.daylighting) meta.energyPlusConfig.daylighting = {};
+        if (!meta.energyPlusConfig.daylighting.outputs) meta.energyPlusConfig.daylighting.outputs = {};
+
+        meta.energyPlusConfig.daylighting.outputs.variables = newVars;
+
+        try {
+            if (typeof project.updateMetadata === 'function') {
+                await project.updateMetadata(meta);
+            } else {
+                project.metadata = meta;
+                // Fallback save if updateMetadata not available
+                if (typeof project.save === 'function') await project.save();
+            }
+            alert('Outputs configuration saved.');
+        } catch (err) {
+            console.error('Failed to save outputs:', err);
+            alert('Failed to save outputs.');
+        }
+    });
+
+    render();
+}
+
 function openRecipePanel(recipe) {
-    const panelId = `panel-${recipe.id}`;
+    const panelId = `panel - ${recipe.id} `;
     let panel = document.getElementById(panelId);
+
+    // Force recreation to show updated layout
+    if (panel) {
+        panel.remove();
+        panel = null;
+    }
+
     if (!panel) {
         panel = createRecipePanel(recipe);
         document.getElementById('window-container').appendChild(panel);
@@ -586,10 +664,19 @@ function openRecipePanel(recipe) {
 async function openDiagnosticsPanel() {
     const panelId = 'panel-energyplus-diagnostics';
     let panel = document.getElementById(panelId);
+
+    // Force recreate if old style
+    if (panel && !panel.querySelector('[data-role="diagnostics-body"]')) {
+        panel.remove();
+        panel = null;
+    }
+
     if (!panel) {
         panel = createDiagnosticsPanel();
         document.getElementById('window-container').appendChild(panel);
+        initializePanelControls(panel);
     }
+
     panel.classList.remove('hidden');
     panel.style.zIndex = getNewZIndex();
     await refreshDiagnosticsPanel(panel);
@@ -599,6 +686,8 @@ function createDiagnosticsPanel() {
     const panel = document.createElement('div');
     panel.id = 'panel-energyplus-diagnostics';
     panel.className = 'floating-window ui-panel resizable-panel';
+    panel.style.width = '600px';
+    panel.style.height = '500px';
 
     panel.innerHTML = `
         <div class="window-header">
@@ -609,54 +698,41 @@ function createDiagnosticsPanel() {
                 <div class="window-icon-close" title="Close"></div>
             </div>
         </div>
-        <div class="window-content">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
+    <div class="window-content" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+        <div class="resize-handle-edge top"></div>
+        <div class="resize-handle-edge right"></div>
+        <div class="resize-handle-edge bottom"></div>
+        <div class="resize-handle-edge left"></div>
+        <div class="resize-handle-corner top-left"></div>
+        <div class="resize-handle-corner top-right"></div>
+        <div class="resize-handle-corner bottom-left"></div>
+        <div class="resize-handle-corner bottom-right"></div>
 
-            <p class="info-box">
-                Preview how the current Ray-Modeler project and EnergyPlus configuration map into EnergyPlus objects.
-                This diagnostics view does not modify your project or write files.
+        <div class="p-4 border-b border-[--grid-color] bg-black/20">
+            <p class="text-xs text-[--text-secondary] mb-3 leading-relaxed">
+                Preview how the current project maps to EnergyPlus objects. This view does not modify your project.
             </p>
-
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
-                <span class="label" style="margin-bottom:0;">Summary</span>
-                <button class="btn btn-xxs btn-secondary" data-action="refresh-diagnostics">
-                    Refresh
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold uppercase tracking-wider text-[--text-secondary]">Diagnostics Summary</span>
+                <button class="btn btn-xs btn-secondary" data-action="refresh-diagnostics">
+                    Refresh Report
                 </button>
             </div>
+        </div>
 
-            <div class="panel-subtle scrollable-panel-inner" style="max-height:18rem;" data-role="diagnostics-body">
-                <div style="font-size:0.8rem; color:var(--text-secondary);">
-                    Diagnostics will appear here.
-                </div>
-            </div>
-
-            <div style="font-size:0.8rem; color:var(--text-secondary);">
-                Use this panel to:
-                <ul class="list-disc pl-4 space-y-0.5">
-                    <li>Verify that zones are detected.</li>
-                    <li>Check constructions and materials are defined and referenced correctly.</li>
-                    <li>Check schedules and loads for missing references.</li>
-                    <li>Jump directly to configuration panels to fix detected issues.</li>
-                </ul>
+        <div class="flex-1 overflow-y-auto p-4 space-y-4" data-role="diagnostics-body">
+            <div class="text-xs text-[--text-secondary]">
+                Loading diagnostics...
             </div>
         </div>
-    `;
+    </div>
+`;
 
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
-    } else {
-        const closeButton = panel.querySelector('.window-icon-close');
-        if (closeButton) {
-            closeButton.onclick = () => panel.classList.add('hidden');
-        }
-    }
+    // Initialize controls AFTER adding to DOM (handled by caller or here if already attached)
+    // But standard pattern is caller appends then inits. 
+    // However, since this is called by openDiagnosticsPanel which appends it, we can't init here easily unless we wait.
+    // Better to init in openDiagnosticsPanel or use the MutationObserver in ui.js if it works.
+    // For safety, we'll add a method to init it.
 
     const refreshBtn = panel.querySelector('[data-action="refresh-diagnostics"]');
     if (refreshBtn) {
@@ -708,466 +784,99 @@ function renderDiagnostics(container, diagnostics) {
     const hasErrors = (issues || []).some((i) => i.severity === 'error');
     const hasWarnings = (issues || []).some((i) => i.severity === 'warning');
 
-    const issueBadge = hasErrors
-        ? `<span class="ml-1 px-1 rounded bg-red-600/70 text-xs">Errors</span>`
-        : hasWarnings
-            ? `<span class="ml-1 px-1 rounded bg-yellow-600/70 text-xs">Warnings</span>`
-            : `<span class="ml-1 px-1 rounded bg-emerald-700/70 text-xs">Clean</span>`;
-
-    const zonesHtml = (geometry?.zones || [])
-        .map(
-            (z) => `
-            <tr>
-                <td class="px-1 py-0.5 align-top">${z.name}</td>
-                <td class="px-1 py-0.5 align-top text-[--text-secondary]">
-                    ${z.surfaces?.total ?? 0}
-                </td>
-                <td class="px-1 py-0.5 align-top text-[--text-secondary]">
-                    ${z.windows?.total ?? 0}
-                </td>
-            </tr>
-        `
-        )
-        .join('') ||
-        `<tr><td class="px-1 py-0.5 text-white" colspan="3">
-            No zones detected. Generated IDF will fall back to a single Zone_1.
-        </td></tr>`;
-
-    const missingCons = constructions?.missingConstructions || [];
-    const unusedCons = constructions?.unusedConstructions || [];
-    const missingMats = materials?.missingMaterials || [];
-    const unusedMats = materials?.unusedMaterials || [];
-    const missingScheds = schedulesAndLoads?.missingSchedules || [];
-    const inconsistentLoads = schedulesAndLoads?.inconsistentLoads || [];
-
-    // Group issues by coarse domain for deep-linking
-    const grouped = {
-        geometry: [],
-        constructions: [],
-        schedules: [],
-        thermostats: [],
-        weather: [],
-        daylighting: [],
-        outdoorAir: [],
-        shading: [],
-        other: [],
-    };
-
-    (issues || []).forEach((i) => {
-        const msg = (i.message || '').toLowerCase();
-        const sev = i.severity || 'info';
-        const entry = { ...i, severity: sev };
-
-        if (
-            msg.includes('construction') ||
-            msg.includes('material')
-        ) {
-            grouped.constructions.push(entry);
-        } else if (
-            msg.includes('schedule') ||
-            msg.includes('zone load') ||
-            msg.includes('people:') ||
-            msg.includes('lighting:') ||
-            msg.includes('equipment:')
-        ) {
-            grouped.schedules.push(entry);
-        } else if (
-            msg.includes('thermostat') ||
-            msg.includes('idealloads') ||
-            msg.includes('ideal loads')
-        ) {
-            grouped.thermostats.push(entry);
-        } else if (
-            msg.includes('weather') ||
-            msg.includes('epw') ||
-            msg.includes('runperiod') ||
-            msg.includes('simulationcontrol')
-        ) {
-            grouped.weather.push(entry);
-        } else if (
-            msg.includes('daylighting') ||
-            msg.includes('illuminance map') ||
-            (msg.includes('output:variable') && msg.includes('lighting')) ||
-            i.context?.domain === 'daylighting'
-        ) {
-            grouped.daylighting.push(entry);
-        } else if (
-            msg.includes('outdoor air') ||
-            msg.includes('designspecification:outdoorair') ||
-            msg.includes('natural ventilation') ||
-            msg.includes('zoneventilation:')
-        ) {
-            grouped.outdoorAir.push(entry);
-        } else if (
-            msg.includes('shading') ||
-            msg.includes('overhang') ||
-            msg.includes('windowproperty:shadingcontrol') ||
-            i.context?.domain === 'shading'
-        ) {
-            grouped.shading.push(entry);
-        } else if (
-            msg.includes('zone') ||
-            msg.includes('surface') ||
-            msg.includes('geometry')
-        ) {
-            grouped.geometry.push(entry);
-        } else {
-            grouped.other.push(entry);
-        }
-    });
-
-    const renderIssueList = (arr, navDomain) => {
-        if (!arr.length) {
-            return `<div class="text-xs text-[--text-secondary]">No issues.</div>`;
-        }
-        return arr
-            .map((i) => {
-                const color =
-                    i.severity === 'error'
-                        ? 'text-red-400'
-                        : i.severity === 'warning'
-                            ? 'text-yellow-300'
-                            : 'text-[--text-secondary]';
-
-                const ctx = i.context || {};
-                const attrs = [];
-
-                if (navDomain === 'daylighting' || ctx.domain === 'daylighting') {
-                    attrs.push(`data-nav="daylighting"`);
-                    if (ctx.zoneName) {
-                        attrs.push(`data-target-zone="${String(ctx.zoneName)}"`);
-                    }
-                    if (ctx.mapName) {
-                        attrs.push(`data-target-map="${String(ctx.mapName)}"`);
-                    }
-                } else if (navDomain === 'shading' || ctx.domain === 'shading') {
-                    attrs.push(`data-nav="shading"`);
-                    if (ctx.surfaceName) {
-                        attrs.push(`data-target-surface="${String(ctx.surfaceName)}"`);
-                    }
-                    if (ctx.controlName) {
-                        attrs.push(`data-target-control="${String(ctx.controlName)}"`);
-                    }
-                }
-
-                const attrStr = attrs.length ? ' ' + attrs.join(' ') : '';
-                return `<div class="${color} cursor-pointer" ${attrStr}>• [${i.severity}] ${i.message}</div>`;
-            })
-            .join('');
-    };
-
-    const button = (label, action) =>
-        `<button class="btn btn-xxs btn-secondary ml-1" data-nav="${action}">${label}</button>`;
-
-    container.innerHTML = `
-        <div class="space-y-2">
-            <div class="flex items-center justify-between">
-                <div>
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Overall Status
-                    </span>
-                    ${issueBadge}
-                </div>
+    // Helper for cards
+    const card = (title, content, statusColor = 'border-white/10') => `
+        <div class="bg-white/5 rounded border ${statusColor} overflow-hidden">
+            <div class="bg-black/20 px-3 py-2 border-b border-white/5 flex justify-between items-center">
+                <h3 class="text-xs font-bold uppercase text-[--text-primary]">${title}</h3>
             </div>
-
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                    Geometry
-                </div>
-                <div class="text-xs text-[--text-secondary] mb-1">
-                    Zones detected: ${geometry?.totals?.zones ?? 0}
-                </div>
-                <table class="w-full text-xs">
-                    <thead class="bg-black/40">
-                        <tr>
-                            <th class="px-1 py-0.5 text-left">Zone</th>
-                            <th class="px-1 py-0.5 text-left">Surfaces*</th>
-                            <th class="px-1 py-0.5 text-left">Windows*</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${zonesHtml}
-                    </tbody>
-                </table>
-                <div class="text-xs text-[--text-secondary] mt-0.5">
-                    *Surface/window counts are placeholders until explicit geometry mapping is exposed.
-                </div>
-            </div>
-
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex items-center justify-between">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Constructions & Materials
-                    </div>
-                    <div class="flex items-center">
-                        ${(missingCons.length || missingMats.length)
-            ? button('Open Constructions', 'constructions') +
-            button('Open Materials', 'materials')
-            : ''}
-                    </div>
-                </div>
-                <div class="text-xs">
-                    ${missingCons.length
-            ? `<div class="text-red-400">Missing constructions: ${missingCons
-                .map((n) => `<code>${n}</code>`)
-                .join(', ')}</div>`
-            : `<div class="text-[--text-secondary]">No missing constructions.</div>`}
-                    ${unusedCons.length
-            ? `<div class="text-[--text-secondary]">Unused constructions: ${unusedCons
-                .slice(0, 10)
-                .map((n) => `<code>${n}</code>`)
-                .join(', ')}${unusedCons.length > 10 ? '…' : ''}</div>`
-            : ''}
-                    ${missingMats.length
-            ? `<div class="text-red-400">Missing materials (referenced but not defined): ${missingMats
-                .map((n) => `<code>${n}</code>`)
-                .join(', ')}</div>`
-            : `<div class="text-[--text-secondary]">No missing materials referenced by constructions.</div>`}
-                    ${unusedMats.length
-            ? `<div class="text-[--text-secondary]">Unused materials: ${unusedMats
-                .slice(0, 10)
-                .map((n) => `<code>${n}</code>`)
-                .join(', ')}${unusedMats.length > 10 ? '…' : ''}</div>`
-            : ''}
-                </div>
-            </div>
-
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex items-center justify-between">
-                    <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Schedules & Loads
-                    </div>
-                    <div class="flex items-center">
-                        ${missingScheds.length || inconsistentLoads.length
-            ? button('Open Schedules', 'schedules') +
-            button('Open Zone Loads', 'zone-loads')
-            : ''}
-                    </div>
-                </div>
-                <div class="text-xs">
-                    ${missingScheds.length
-            ? `<div class="text-yellow-300">Missing schedules: ${missingScheds
-                .map((n) => `<code>${n}</code>`)
-                .join(', ')}</div>`
-            : `<div class="text-[--text-secondary]">No missing schedules referenced by loads/controls.</div>`}
-                    ${inconsistentLoads.length
-            ? `<div class="mt-1 text-xs text-yellow-300">
-                               ${inconsistentLoads
-                .slice(0, 20)
-                .map(
-                    (e) =>
-                        `• [${e.zone}] ${e.issue}`
-                )
-                .join('<br>')}
-                               ${inconsistentLoads.length > 20
-                ? '<br>…'
-                : ''
-            }
-                           </div>`
-            : ''}
-                </div>
-            </div>
-
-            <!-- Grouped Issues with deep-links -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                    Issues by Category
-                </div>
-
-                <!-- Geometry -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Geometry</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="geometry">Open Diagnostics</button>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.geometry)}
-                    </div>
-                </div>
-
-                <!-- Constructions & Materials -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Constructions & Materials</span>
-                        <div>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="constructions">Constructions</button>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="materials">Materials</button>
-                        </div>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.constructions)}
-                    </div>
-                </div>
-
-                <!-- Schedules & Zone Loads -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Schedules & Zone Loads</span>
-                        <div>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="schedules">Schedules</button>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="zone-loads">Zone Loads</button>
-                        </div>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.schedules)}
-                    </div>
-                </div>
-
-                <!-- Thermostats & IdealLoads -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Thermostats & IdealLoads</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="ideal-loads">
-                            <svg width="16" height="16" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="iconify iconify--emojione-monotone" style="fill: currentColor;"><path d="M30.381 14.757c-11.967 0-21.668 9.681-21.668 21.621C8.713 48.32 18.414 58 30.381 58s21.666-9.68 21.666-21.622c0-11.94-9.699-21.621-21.666-21.621m1.286 18.828a1.285 1.285 0 0 1-2.572 0v-14.3a1.287 1.287 0 0 1 2.572 0z"/><path d="M59.912 25.526a30.9 30.9 0 0 0-10.499-13.738A29.8 29.8 0 0 0 33.02 6.027a29.6 29.6 0 0 0-16.88 4.461c-5.012 3.129-9.07 7.78-11.504 13.226-2.434 5.396-3.205 11.557-2.216 17.44.661 4.018 2.194 7.893 4.418 11.331h2.968c-2.12-3.169-3.578-6.778-4.218-10.503-.86-4.94-.328-10.129 1.512-14.709a26.3 26.3 0 0 1 9.055-11.597c4.039-2.913 8.917-4.558 13.816-4.692a24.46 24.46 0 0 1 13.958 3.876c4.145 2.662 7.416 6.594 9.311 11.018 1.957 4.518 2.466 9.543 1.594 14.291a24.07 24.07 0 0 1-6.32 12.315h9.299a31.3 31.3 0 0 0 3.646-9.815c1.067-5.696.558-11.694-1.547-17.143"/></svg>
-                        </button>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.thermostats)}
-                    </div>
-                </div>
-
-                <!-- Weather & Simulation Control -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Weather & Simulation Control</span>
-                        <div>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="weather">Weather & Location</button>
-                            <button class="btn btn-xxs btn-secondary ml-1" data-nav="sim-control">Sim Control</button>
-                        </div>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.weather)}
-                    </div>
-                </div>
-
-                <!-- Daylighting & Outputs -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Daylighting & Outputs</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="daylighting">Daylighting Panel</button>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.daylighting, 'daylighting')}
-                    </div>
-                </div>
-
-                <!-- Outdoor Air & Natural Ventilation -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Outdoor Air & Natural Ventilation</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="outdoor-air">Outdoor Air Panel</button>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.outdoorAir)}
-                    </div>
-                </div>
-
-                <!-- Shading & Solar Control -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Shading & Solar Control</span>
-                        <button class="btn btn-xxs btn-secondary ml-1" data-nav="shading">Shading Panel</button>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.shading, 'shading')}
-                    </div>
-                </div>
-
-                <!-- Other -->
-                <div class="mt-1">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-[--text-secondary]">Other / Unclassified</span>
-                    </div>
-                    <div class="text-xs">
-                        ${renderIssueList(grouped.other)}
-                    </div>
-                </div>
+            <div class="p-3">
+                ${content}
             </div>
         </div>
     `;
 
-    // Wire quick navigation buttons
-    container
-        .querySelectorAll('[data-nav]')
-        .forEach((el) => {
-            el.addEventListener('click', (ev) => {
-                const target = ev.currentTarget;
-                const nav = target.getAttribute('data-nav');
-                const targetZone = target.getAttribute('data-target-zone');
-                const targetMap = target.getAttribute('data-target-map');
+    // 1. Issues Section
+    let issuesHtml = '';
+    if (issues && issues.length > 0) {
+        const items = issues.map(i => `
+            <div class="flex items-start gap-2 text-xs mb-2 last:mb-0">
+                <div class="mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${i.severity === 'error' ? 'bg-red-500' : 'bg-amber-500'}"></div>
+                <span class="text-[--text-secondary]">${i.message}</span>
+            </div>
+        `).join('');
+        issuesHtml = card('Issues & Warnings', items, hasErrors ? 'border-red-500/30' : 'border-amber-500/30');
+    } else {
+        issuesHtml = card('Status', '<div class="text-xs text-emerald-400 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-emerald-500"></div>No critical issues detected.</div>', 'border-emerald-500/30');
+    }
 
-                if (nav === 'materials') {
-                    openMaterialsManagerPanel();
-                } else if (nav === 'constructions') {
-                    openConstructionsManagerPanel();
-                } else if (nav === 'schedules') {
-                    openSchedulesManagerPanel();
-                } else if (nav === 'zone-loads') {
-                    openZoneLoadsManagerPanel();
-                } else if (nav === 'ideal-loads') {
-                    openThermostatsPanel();
-                } else if (nav === 'weather') {
-                    openWeatherLocationManagerPanel();
-                } else if (nav === 'sim-control') {
-                    openSimulationControlManagerPanel();
-                } else if (nav === 'daylighting') {
-                    openDaylightingManagerPanel();
+    // 2. Geometry Section
+    const zonesList = (geometry?.zones || []).map(z => `
+        <div class="flex justify-between text-xs py-1 border-b border-white/5 last:border-0">
+            <span>${z.name}</span>
+            <span class="text-[--text-secondary]">${z.surfaces?.total || 0}srf / ${z.windows?.total || 0}win</span>
+        </div>
+    `).join('') || '<div class="text-xs text-[--text-secondary] italic">No zones detected.</div>';
 
-                    // If diagnostics provided a target zone/map, scroll/highlight in the Daylighting panel.
-                    const dp = document.getElementById('panel-energyplus-daylighting');
-                    if (dp) {
-                        // Target zone row in Daylighting controls
-                        if (targetZone) {
-                            const row =
-                                dp.querySelector(`.daylighting-controls-tbody tr[data-zone-name="${CSS.escape(targetZone)}"]`) ||
-                                Array.from(dp.querySelectorAll('.daylighting-controls-tbody tr')).find((tr) =>
-                                    tr.textContent.includes(targetZone)
-                                );
-                            if (row) {
-                                row.classList.add('diag-highlight');
-                                row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                                setTimeout(() => row.classList.remove('diag-highlight'), 2000);
-                            }
-                        }
+    const geometryHtml = card('Geometry', zonesList);
 
-                        // Target illuminance map row
-                        if (targetMap) {
-                            const rows = dp.querySelectorAll('.illum-maps-tbody tr');
-                            const mapRow = Array.from(rows).find((tr) => {
-                                const nameInput = tr.querySelector('[data-field="name"]');
-                                return nameInput && nameInput.value === targetMap;
-                            });
-                            if (mapRow) {
-                                mapRow.classList.add('diag-highlight');
-                                mapRow.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                                setTimeout(() => mapRow.classList.remove('diag-highlight'), 2000);
-                            }
-                        }
-                    }
-                } else if (nav === 'outdoor-air') {
-                    openOutdoorAirManagerPanel();
-                } else if (nav === 'shading') {
-                    openShadingManagerPanel();
-                } else if (nav === 'geometry') {
-                    // Geometry is best inspected via diagnostics panel itself
-                    openDiagnosticsPanel();
-                }
-            });
-        });
+    // 3. Constructions & Materials
+    const missingCons = constructions?.missingConstructions || [];
+    const missingMats = materials?.missingMaterials || [];
+
+    let constContent = '';
+    if (missingCons.length > 0 || missingMats.length > 0) {
+        constContent = `
+            <div class="text-xs text-red-400 mb-2">Missing Definitions:</div>
+            <ul class="list-disc pl-4 text-xs text-[--text-secondary] space-y-1">
+                ${missingCons.map(c => `<li>Construction: ${c}</li>`).join('')}
+                ${missingMats.map(m => `<li>Material: ${m}</li>`).join('')}
+            </ul>
+        `;
+    } else {
+        constContent = `<div class="text-xs text-[--text-secondary]">All referenced constructions and materials are defined.</div>`;
+    }
+    const constHtml = card('Constructions & Materials', constContent, (missingCons.length || missingMats.length) ? 'border-red-500/30' : 'border-white/10');
+
+    // 4. Schedules & Loads
+    const missingScheds = schedulesAndLoads?.missingSchedules || [];
+    let schedContent = '';
+    if (missingScheds.length > 0) {
+        schedContent = `
+            <div class="text-xs text-amber-400 mb-2">Missing Schedules:</div>
+            <ul class="list-disc pl-4 text-xs text-[--text-secondary] space-y-1">
+                ${missingScheds.map(s => `<li>${s}</li>`).join('')}
+            </ul>
+        `;
+    } else {
+        schedContent = `<div class="text-xs text-[--text-secondary]">All referenced schedules found.</div>`;
+    }
+    const schedHtml = card('Schedules & Loads', schedContent, missingScheds.length ? 'border-amber-500/30' : 'border-white/10');
+
+    container.innerHTML = `
+        <div class="space-y-4">
+            ${issuesHtml}
+            ${geometryHtml}
+            ${constHtml}
+            ${schedHtml}
+        </div>
+    `;
 }
 
 function createRecipePanel(recipe) {
     const panel = document.createElement('div');
-    panel.id = `panel-${recipe.id}`;
+    panel.id = `panel - ${recipe.id} `;
     panel.className = 'floating-window ui-panel resizable-panel';
     panel.dataset.scriptName = recipe.scriptName;
+    panel.style.width = '600px';
+    panel.style.height = '500px';
 
     let paramsHtml = '';
     recipe.params.forEach((param) => {
         paramsHtml += `
             <div>
-                <label class="label" for="${param.id}">${param.name}</label>
-                <input type="${param.type}" id="${param.id}" ${param.accept ? `accept="${param.accept}"` : ''} class="w-full text-sm">
+                <label class="label">${param.name}</label>
+                <input type="${param.type}" id="${param.id}" ${param.accept ? `accept="${param.accept}"` : ''} class="w-full mt-1">
             </div>
         `;
     });
@@ -1176,7 +885,6 @@ function createRecipePanel(recipe) {
     const isHeating = recipe.id === 'heating-design-day';
     const isCooling = recipe.id === 'cooling-design-day';
 
-    // Helper: read current project-level EPW from metadata
     function getProjectEpwPath() {
         try {
             const meta =
@@ -1208,7 +916,7 @@ function createRecipePanel(recipe) {
                 <div class="window-icon-close" title="Close"></div>
             </div>
         </div>
-        <div class="window-content space-y-4">
+        <div class="window-content" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
             <div class="resize-handle-edge top"></div>
             <div class="resize-handle-edge right"></div>
             <div class="resize-handle-edge bottom"></div>
@@ -1217,54 +925,68 @@ function createRecipePanel(recipe) {
             <div class="resize-handle-corner top-right"></div>
             <div class="resize-handle-corner bottom-left"></div>
             <div class="resize-handle-corner bottom-right"></div>
-            <p class="info-box !text-xs !py-2 !px-3">${recipe.description}</p>
-            ${isAnnual
-            ? `
-            <button class="btn btn-secondary w-full" data-action="generate-idf-from-project">
-                Generate IDF from current Ray-Modeler project
-            </button>
-            <p class="text-xs text-[--text-secondary] mt-1">
-                Uses the current <code>energyPlusConfig</code> to write <code>model.idf</code>.
-                Configure Materials, Constructions, Schedules, Zone Loads, Thermostats & IdealLoads, Daylighting, Outputs, and Simulation Control in the sidebar.
-            </p>
-            `
-            : ''
-        }
-            ${paramsHtml}
-            ${isAnnual
-            ? `
-            <div class="text-xs text-[--text-secondary]">
-                Project EPW: <span data-role="project-epw-label">(resolving...)</span>
-            </div>
-            `
-            : ''
-        }
-            ${isHeating || isCooling
-            ? `
-            <p class="text-xs text-[--text-secondary]">
-                This recipe reuses the selected IDF (or <code>model.idf</code> by default).
-                Ensure your <code>SimulationControl</code> and <code>SizingPeriod</code> objects in the IDF represent the desired design-day conditions.
-                EnergyPlus is run in a dedicated <code>runs/${isHeating ? 'heating-design' : 'cooling-design'}</code> directory via the Electron bridge.
-            </p>
-            `
-            : ''
-        }
-            <div class="space-y-2">
-                <button class="btn btn-primary w-full" data-action="run">Run Simulation</button>
-            </div>
-            <div class="mt-3">
-                <div class="text-xs text-[--text-secondary] mb-0.5">
-                    Runs are executed via Electron with:
-                    <code>model.idf</code> or your selected IDF and outputs written under
-                    <code>runs/<recipe-name>/</code> relative to the project directory.
+            
+            <div style="display: flex; flex: 1; overflow: hidden;">
+                <!-- Left Sidebar -->
+                <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                    <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
+                        <span class="label">Configuration</span>
+                    </div>
+                    <div class="scrollable-panel-inner" style="flex: 1; overflow-y: auto;">
+                        <div class="tstat-item active" style="padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color); background-color: var(--accent-color); color: white;">
+                            <div class="text-xs">Settings</div>
+                        </div>
+                    </div>
                 </div>
-                <h5 class="font-semibold text-xs uppercase text-[--text-secondary] mb-1">EnergyPlus Output</h5>
-                <pre class="simulation-output-console w-full h-32 font-mono text-xs p-2 rounded bg-[--grid-color] border border-gray-500/50 overflow-y-auto whitespace-pre-wrap"></pre>
+
+                <!-- Right Content -->
+                <div style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                    <p class="text-xs text-[--text-secondary]">${recipe.description}</p>
+                    
+                    ${isAnnual ? `
+                    <div class="p-2 border border-[--grid-color] rounded bg-black/20">
+                        <button class="btn btn-sm btn-secondary w-full" data-action="generate-idf-from-project">
+                            Generate IDF from Project
+                        </button>
+                        <p class="text-xs text-[--text-secondary] mt-1">
+                            Writes <code>model.idf</code> based on current configuration.
+                        </p>
+                    </div>
+                    ` : ''}
+
+                    <div class="space-y-4">
+                        <h3 class="font-semibold text-sm uppercase border-b border-[--grid-color] pb-2">
+                            Simulation Parameters
+                        </h3>
+                        ${paramsHtml}
+                        
+                        ${isAnnual ? `
+                        <div class="text-xs text-[--text-secondary]">
+                            Project EPW: <span data-role="project-epw-label" class="text-[--accent-color]">(resolving...)</span>
+                        </div>
+                        ` : ''}
+                        
+                        ${isHeating || isCooling ? `
+                        <p class="text-xs text-[--text-secondary]">
+                            Reuses selected IDF (or <code>model.idf</code>). Ensure <code>SimulationControl</code> and <code>SizingPeriod</code> are set.
+                            Runs in <code>runs/${isHeating ? 'heating-design' : 'cooling-design'}</code>.
+                        </p>
+                        ` : ''}
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-[--grid-color]">
+                        <button class="btn btn-sm btn-primary" data-action="run">Run Simulation</button>
+                    </div>
+                    
+                    <div class="mt-2">
+                         <h5 class="font-semibold text-xs uppercase text-[--text-secondary] mb-1">Output Console</h5>
+                         <pre class="simulation-output-console w-full h-32 font-mono text-xs p-2 rounded bg-[--grid-color] border border-gray-500/50 overflow-y-auto whitespace-pre-wrap"></pre>
+                    </div>
+                </div>
             </div>
         </div>
     `;
 
-    // Initialize standard floating window behavior (drag, resize, close/max/min)
     if (typeof window !== 'undefined' && window.initializePanelControls) {
         window.initializePanelControls(panel);
     } else {
@@ -1274,7 +996,6 @@ function createRecipePanel(recipe) {
         }
     }
 
-    // Wire actions
     const generateBtn = panel.querySelector('[data-action="generate-idf-from-project"]');
     const runBtn = panel.querySelector('[data-action="run"]');
     const outputConsole = panel.querySelector('.simulation-output-console');
@@ -1285,40 +1006,34 @@ function createRecipePanel(recipe) {
         projectEpwLabel.textContent = epw || '(not set)';
     }
 
-    // Lazy import to avoid circular deps on load
     if (generateBtn) {
         generateBtn.addEventListener('click', async () => {
             try {
                 const { generateAndStoreIdf } = await import('./energyplus.js');
-                const idfContent = await generateAndStoreIdf();
+                await generateAndStoreIdf();
                 if (outputConsole) {
                     outputConsole.textContent = 'IDF generated and stored as model.idf\n';
                 }
             } catch (err) {
                 console.error('EnergyPlus: failed to generate IDF from project', err);
                 if (outputConsole) {
-                    outputConsole.textContent += `Error generating IDF: ${err.message}\n`;
+                    outputConsole.textContent += `Error generating IDF: ${err.message} \n`;
                 }
                 alert('Failed to generate IDF from project. Check console for details.');
             }
         });
     }
 
-
     if (runBtn) {
-        // Per-panel listeners to avoid leaks; scoped to this recipe panel.
         let epOutputListener = null;
         let epExitListener = null;
 
         runBtn.addEventListener('click', () => {
             if (!window.electronAPI) {
                 if (outputConsole) {
-                    outputConsole.textContent +=
-                        'Electron environment not detected. Please run via Electron or use the generated IDF/scripts.\n';
+                    outputConsole.textContent += 'Electron environment not detected. Please run via Electron or use the generated IDF/scripts.\n';
                 }
-                alert(
-                    'EnergyPlus can only be run directly inside the Electron app. In browser, use the generated IDF/scripts manually.'
-                );
+                alert('EnergyPlus can only be run directly inside the Electron app. In browser, use the generated IDF/scripts manually.');
                 return;
             }
 
@@ -1326,36 +1041,16 @@ function createRecipePanel(recipe) {
             const epwInput = panel.querySelector('#epw-file');
             const exeInput = panel.querySelector('#eplus-exe');
 
-            const idfPath =
-                idfInput &&
-                    idfInput.files &&
-                    idfInput.files[0]
-                    ? idfInput.files[0].path || idfInput.files[0].name
-                    : 'model.idf'; // fallback: use generated IDF in project folder
+            const idfPath = idfInput && idfInput.files && idfInput.files[0] ? idfInput.files[0].path || idfInput.files[0].name : 'model.idf';
 
-            // EPW resolution for all recipes:
-            // 1) Explicit EPW selected in this panel (if present)
-            // 2) Project-level EPW from energyPlusConfig.weather.epwPath / weatherFilePath
-            const explicitEpw =
-                epwInput &&
-                    epwInput.files &&
-                    epwInput.files[0]
-                    ? epwInput.files[0].path || epwInput.files[0].name
-                    : null;
-
+            const explicitEpw = epwInput && epwInput.files && epwInput.files[0] ? epwInput.files[0].path || epwInput.files[0].name : null;
             const projectEpw = getProjectEpwPath();
             const epwPath = explicitEpw || projectEpw || null;
 
-            const energyPlusPath =
-                exeInput && exeInput.value
-                    ? exeInput.value.trim()
-                    : null;
+            const energyPlusPath = exeInput && exeInput.value ? exeInput.value.trim() : null;
 
-            // For annual and design-day recipes, we require EPW to keep behavior explicit.
             if (!epwPath) {
-                alert(
-                    'No EPW specified. Select an EPW here or configure a project-level EPW in the "Weather & Location" panel.'
-                );
+                alert('No EPW specified. Select an EPW here or configure a project-level EPW in the "Weather & Location" panel.');
                 return;
             }
 
@@ -1367,7 +1062,6 @@ function createRecipePanel(recipe) {
             const runName = getRunName();
             const runId = `${runName}-${Date.now()}`;
 
-            // Pre-run validation (no Electron call if blocking issues exist)
             const preRun = validateEnergyPlusRunRequest({
                 idfPath,
                 epwPath,
@@ -1378,237 +1072,107 @@ function createRecipePanel(recipe) {
             if (!preRun.ok) {
                 const summary = formatIssuesSummary(preRun.issues, 4);
                 if (outputConsole) {
-                    outputConsole.textContent +=
-                        'Pre-run validation failed:\n' +
-                        (summary ||
-                            'Blocking configuration issues detected.') +
-                        '\n\n';
-                    outputConsole.scrollTop =
-                        outputConsole.scrollHeight;
+                    outputConsole.textContent += 'Pre-run validation failed:\n' + (summary || 'Blocking configuration issues detected.') + '\n\n';
+                    outputConsole.scrollTop = outputConsole.scrollHeight;
                 }
-                alert(
-                    'Cannot start EnergyPlus run due to configuration issues.\n\n' +
-                    (summary ||
-                        'Check the EnergyPlus sidebar configuration and diagnostics.')
-                );
+                alert('Cannot start EnergyPlus run due to configuration issues.\n\n' + (summary || 'Check the EnergyPlus sidebar configuration and diagnostics.'));
                 return;
             }
 
-            // Register run in resultsManager (status: pending)
             resultsManager.registerEnergyPlusRun(runId, {
                 label: `EnergyPlus ${runName}`,
                 recipeId: recipe.id,
             });
 
             if (outputConsole) {
-                outputConsole.textContent =
-                    `Running EnergyPlus [${runName}]...\n` +
-                    `IDF: ${idfPath}\n` +
-                    `EPW: ${epwPath}\n` +
-                    `Exe: ${energyPlusPath}\n` +
-                    `Outputs: runs/${runName}/ (if supported by Electron bridge)\n\n`;
+                outputConsole.textContent = `Running EnergyPlus [${runName}]...\nIDF: ${idfPath}\nEPW: ${epwPath}\nExe: ${energyPlusPath}\nOutputs: runs/${runName}/ (if supported by Electron bridge)\n\n`;
             }
 
-            // Clean up any previous listeners for this panel to avoid leaks.
-            if (
-                window.electronAPI.offEnergyPlusOutput &&
-                epOutputListener
-            ) {
-                window.electronAPI.offEnergyPlusOutput(
-                    epOutputListener
-                );
+            if (window.electronAPI.offEnergyPlusOutput && epOutputListener) {
+                window.electronAPI.offEnergyPlusOutput(epOutputListener);
                 epOutputListener = null;
             }
-            if (
-                window.electronAPI.offEnergyPlusExit &&
-                epExitListener
-            ) {
+            if (window.electronAPI.offEnergyPlusExit && epExitListener) {
                 window.electronAPI.offEnergyPlusExit(epExitListener);
                 epExitListener = null;
             }
 
-            // Run EnergyPlus via Electron bridge.
-            // See preload.js for full contract; main should:
-            // - Use runName/runId to choose output directory, e.g. runs/annual, runs/heating-design.
-            // - Invoke: energyplus -w epwPath -d runs/runName -r idfPath
-            // - Stream stdout/stderr to 'energyplus-output'; send 'energyplus-exit' on completion.
             const runOptions = {
                 idfPath,
                 epwPath,
                 energyPlusPath,
                 runName,
-                runId, // Used by ResultsManager and for filtering logs
+                runId,
             };
 
             window.electronAPI.runEnergyPlus(runOptions);
 
-            // Output handler, tolerant to both structured and legacy payloads.
             const handleOutput = (payload) => {
                 if (!outputConsole) return;
-
                 let text = '';
-                if (
-                    payload &&
-                    typeof payload === 'object' &&
-                    typeof payload.chunk === 'string'
-                ) {
-                    // New structured form: filter by runId if provided.
-                    if (
-                        payload.runId &&
-                        payload.runId !== runId
-                    ) {
-                        return;
-                    }
+                if (payload && typeof payload === 'object' && typeof payload.chunk === 'string') {
+                    if (payload.runId && payload.runId !== runId) return;
                     text = payload.chunk;
                 } else {
-                    // Legacy: plain string.
                     text = String(payload ?? '');
                 }
-
                 if (!text) return;
                 outputConsole.textContent += text;
-                outputConsole.scrollTop =
-                    outputConsole.scrollHeight;
+                outputConsole.scrollTop = outputConsole.scrollHeight;
             };
 
-            // Exit handler, tolerant to both structured and legacy payloads.
             const handleExit = (payload) => {
-                // Ignore events for other runs if runId is present.
-                if (
-                    payload &&
-                    typeof payload === 'object' &&
-                    payload.runId &&
-                    payload.runId !== runId
-                ) {
-                    return;
-                }
+                if (payload && typeof payload === 'object' && payload.runId && payload.runId !== runId) return;
 
-                const code =
-                    typeof payload === 'object' &&
-                        payload !== null
-                        ? typeof payload.exitCode === 'number'
-                            ? payload.exitCode
-                            : 0
-                        : typeof payload === 'number'
-                            ? payload
-                            : 0;
+                const code = typeof payload === 'object' && payload !== null ? (typeof payload.exitCode === 'number' ? payload.exitCode : 0) : (typeof payload === 'number' ? payload : 0);
+                const resolvedRunId = (payload && typeof payload === 'object' && payload.runId) || runId;
+                const baseDir = payload && typeof payload === 'object' ? payload.outputDir : undefined;
+                const errContent = payload && typeof payload === 'object' ? payload.errContent : undefined;
+                const csvContents = payload && typeof payload === 'object' ? payload.csvContents : undefined;
 
-                const resolvedRunId =
-                    (payload &&
-                        typeof payload === 'object' &&
-                        payload.runId) ||
-                    runId;
-
-                const baseDir =
-                    payload &&
-                        typeof payload === 'object'
-                        ? payload.outputDir
-                        : undefined;
-
-                const errContent =
-                    payload &&
-                        typeof payload === 'object'
-                        ? payload.errContent
-                        : undefined;
-
-                const csvContents =
-                    payload &&
-                        typeof payload === 'object'
-                        ? payload.csvContents
-                        : undefined;
-
-                const runRecord =
-                    resultsManager.parseEnergyPlusResults(
-                        resolvedRunId,
-                        {
-                            baseDir,
-                            errContent,
-                            csvContents,
-                            statusFromRunner: code,
-                        }
-                    );
+                const runRecord = resultsManager.parseEnergyPlusResults(resolvedRunId, {
+                    baseDir,
+                    errContent,
+                    csvContents,
+                    statusFromRunner: code,
+                });
 
                 if (outputConsole) {
-                    outputConsole.textContent +=
-                        `\n--- EnergyPlus exited with code: ${code} ---\n`;
-
+                    outputConsole.textContent += `\n--- EnergyPlus exited with code: ${code} ---\n`;
                     if (runRecord && runRecord.errors) {
-                        const {
-                            fatal,
-                            severe,
-                            warning,
-                        } = runRecord.errors;
+                        const { fatal, severe, warning } = runRecord.errors;
                         const lines = [];
                         if (fatal.length) {
-                            lines.push(
-                                `Fatal errors: ${fatal.length}`
-                            );
+                            lines.push(`Fatal errors: ${fatal.length}`);
                             lines.push(fatal[0]);
                         }
                         if (severe.length) {
-                            lines.push(
-                                `Severe errors: ${severe.length}`
-                            );
-                            if (!fatal.length) {
-                                lines.push(severe[0]);
-                            }
+                            lines.push(`Severe errors: ${severe.length}`);
+                            if (!fatal.length) lines.push(severe[0]);
                         }
-                        if (warning.length) {
-                            lines.push(
-                                `Warnings: ${warning.length}`
-                            );
-                        }
-                        if (lines.length) {
-                            outputConsole.textContent +=
-                                lines.join('\n') + '\n';
-                        }
+                        if (warning.length) lines.push(`Warnings: ${warning.length}`);
+                        if (lines.length) outputConsole.textContent += lines.join('\n') + '\n';
                     }
-
-                    outputConsole.scrollTop =
-                        outputConsole.scrollHeight;
+                    outputConsole.scrollTop = outputConsole.scrollHeight;
                 }
 
-                // Auto-detach listeners on completion when off* is available.
-                if (
-                    window.electronAPI.offEnergyPlusOutput &&
-                    epOutputListener
-                ) {
-                    window.electronAPI.offEnergyPlusOutput(
-                        epOutputListener
-                    );
+                if (window.electronAPI.offEnergyPlusOutput && epOutputListener) {
+                    window.electronAPI.offEnergyPlusOutput(epOutputListener);
                     epOutputListener = null;
                 }
-                if (
-                    window.electronAPI.offEnergyPlusExit &&
-                    epExitListener
-                ) {
-                    window.electronAPI.offEnergyPlusExit(
-                        epExitListener
-                    );
+                if (window.electronAPI.offEnergyPlusExit && epExitListener) {
+                    window.electronAPI.offEnergyPlusExit(epExitListener);
                     epExitListener = null;
                 }
             };
 
-            // Attach listeners (prefer structured helpers; fallback to legacy).
             if (window.electronAPI.onEnergyPlusOutput) {
-                epOutputListener =
-                    window.electronAPI.onEnergyPlusOutput(
-                        handleOutput
-                    );
+                epOutputListener = window.electronAPI.onEnergyPlusOutput(handleOutput);
             }
-
             if (window.electronAPI.onceEnergyPlusExit) {
-                epExitListener =
-                    window.electronAPI.onceEnergyPlusExit(
-                        handleExit
-                    );
-            } else if (
-                window.electronAPI.onEnergyPlusExit
-            ) {
-                epExitListener =
-                    window.electronAPI.onEnergyPlusExit(
-                        handleExit
-                    );
+                epExitListener = window.electronAPI.onceEnergyPlusExit(handleExit);
+            } else if (window.electronAPI.onEnergyPlusExit) {
+                epExitListener = window.electronAPI.onEnergyPlusExit(handleExit);
             }
         });
     }
@@ -1633,486 +1197,533 @@ function createRecipePanel(recipe) {
  */
 function openZoneLoadsManagerPanel() {
     const panelId = 'panel-energyplus-zone-loads';
+    const btnId = 'toggle-panel-zone-loads-btn';
+    const btn = document.getElementById(btnId);
+
     let panel = document.getElementById(panelId);
+
+    // Toggle logic: if open, close it
+    if (panel && !panel.classList.contains('hidden')) {
+        panel.classList.add('hidden');
+        if (btn) btn.classList.remove('active');
+        return;
+    }
+
     if (!panel) {
         panel = createZoneLoadsManagerPanel();
         document.getElementById('window-container').appendChild(panel);
     }
     panel.classList.remove('hidden');
     panel.style.zIndex = getNewZIndex();
+
+    if (btn) btn.classList.add('active');
 }
 
 function createZoneLoadsManagerPanel() {
     const panel = document.createElement('div');
     panel.id = 'panel-energyplus-zone-loads';
     panel.className = 'floating-window ui-panel resizable-panel';
+    panel.style.width = '600px';
+    panel.style.height = '600px';
 
     panel.innerHTML = `
-        <div class="window-header">
-            <span>Zone Loads</span>
-            <!-- Help button removed -->
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
+            <div class="window-header">
+                <span>Zone Loads Manager</span>
+                <div class="window-controls">
+                    <div class="window-icon-max" title="Maximize/Restore"></div>
+                    <div class="collapse-icon" title="Minimize"></div>
+                    <div class="window-icon-close" title="Close"></div>
+                </div>
             </div>
-        </div>
-        <div class="window-content space-y-2">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure per-zone internal loads (people, lighting, equipment, infiltration).
-                Values are stored in <code>energyPlusConfig.zoneLoads</code>.
-            </p>
+            <div class="window-content" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+                <div class="resize-handle-edge top"></div>
+                <div class="resize-handle-edge right"></div>
+                <div class="resize-handle-edge bottom"></div>
+                <div class="resize-handle-edge left"></div>
+                <div class="resize-handle-corner top-left"></div>
+                <div class="resize-handle-corner top-right"></div>
+                <div class="resize-handle-corner bottom-left"></div>
+                <div class="resize-handle-corner bottom-right"></div>
+                
+                <div style="display: flex; flex: 1; overflow: hidden;">
+                    <!-- Left Sidebar: Category List -->
+                    <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                        <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
+                            <span class="label">Load Types</span>
+                        </div>
+                        <div id="zone-loads-categories" class="scrollable-panel-inner" style="flex: 1; overflow-y: auto;">
+                            <!-- Categories injected here -->
+                        </div>
+                    </div>
 
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center gap-2">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">Template (Apply to all zones)</span>
-                    <button class="btn btn-xxs btn-secondary" data-action="apply-template">Apply to all zones</button>
-                </div>
-                <div class="grid grid-cols-4 gap-1 mt-1 text-xs">
-                    <div>
-                        <label class="label !text-xs">People [p/m²]</label>
-                        <input type="number" step="0.01" class="w-full text-xs" data-template="peoplePerArea">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Lights [W/m²]</label>
-                        <input type="number" step="0.1" class="w-full text-xs" data-template="lightsWm2">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Equip [W/m²]</label>
-                        <input type="number" step="0.1" class="w-full text-xs" data-template="equipWm2">
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Infil [ACH]</label>
-                        <input type="number" step="0.1" class="w-full text-xs" data-template="infilAch">
-                    </div>
-                </div>
-                <div class="grid grid-cols-4 gap-1 mt-1 text-xs">
-                    <div>
-                        <label class="label !text-xs">People Sched</label>
-                        <select class="w-full text-xs" data-template="peopleSched"></select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Lights Sched</label>
-                        <select class="w-full text-xs" data-template="lightsSched"></select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Equip Sched</label>
-                        <select class="w-full text-xs" data-template="equipSched"></select>
-                    </div>
-                    <div>
-                        <label class="label !text-xs">Infil Sched</label>
-                        <select class="w-full text-xs" data-template="infilSched"></select>
+                    <!-- Right Content: Editor -->
+                    <div id="zone-loads-content" style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                        <!-- Dynamic Content -->
                     </div>
                 </div>
             </div>
-
-            <div class="border border-gray-700/70 rounded bg-black/40 max-h-72 overflow-y-auto **scrollable-panel-inner**">
-                <table class="w-full text-xs zone-loads-table">
-                    <thead class="bg-black/40">
-                        <tr>
-                            <th class="px-1 py-1 text-left">Zone</th>
-                            <th class="px-1 py-1 text-left">People [p/m²] / Sched</th>
-                            <th class="px-1 py-1 text-left">Lights [W/m²] / Sched</th>
-                            <th class="px-1 py-1 text-left">Equip [W/m²] / Sched</th>
-                            <th class="px-1 py-1 text-left">Infil [ACH] / Sched</th>
-                        </tr>
-                    </thead>
-                    <tbody class="zone-loads-tbody"></tbody>
-                </table>
-            </div>
-
-            <div class="flex justify-end gap-2 mt-1">
-                <button class="btn btn-xxs btn-secondary" data-action="save-zone-config">
-                    Save Configuration
-                </button>
-            </div>
-
-            <div class="text-xs text-[--text-secondary]">
-                Notes:
-                <ul class="list-disc pl-4 space-y-0.5">
-                    <li>Loads are stored per zone in <code>zoneLoads</code> (one entry per zone).</li>
-                </ul>
-            </div>
-        </div>
-    `;
+        `;
 
     if (typeof window !== 'undefined' && window.initializePanelControls) {
         window.initializePanelControls(panel);
     } else {
         const closeBtn = panel.querySelector('.window-icon-close');
         if (closeBtn) {
-            closeBtn.onclick = () => panel.classList.add('hidden');
+            closeBtn.onclick = () => {
+                panel.classList.add('hidden');
+                const btn = document.getElementById('toggle-panel-zone-loads-btn');
+                if (btn) btn.classList.remove('active');
+            };
         }
     }
 
-    const tbody = panel.querySelector('.zone-loads-tbody');
-    const headerHelp = panel.querySelector('[data-action="open-help-loads"]');
-    // Header Loads help button disabled
-    // if (headerHelp) {
-    //     headerHelp.addEventListener('click', () => openHelpPanel('config/loads'));
-    // }
-    const applyTemplateBtn = panel.querySelector('[data-action="apply-template"]');
-    const saveBtn = panel.querySelector('[data-action="save-zone-config"]');
+    const categoryContainer = panel.querySelector('#zone-loads-categories');
+    const contentContainer = panel.querySelector('#zone-loads-content');
+    let activeTab = 'people';
 
-    function getMetaAndEP() {
-        const meta =
-            (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-            project.metadata ||
-            {};
-        const ep = meta.energyPlusConfig || meta.energyplus || {};
-        return { meta, ep };
+    const categories = [
+        { id: 'people', label: 'People' },
+        { id: 'lights', label: 'Lights' },
+        { id: 'electric', label: 'Electric Equipment' },
+        { id: 'gas', label: 'Gas Equipment' },
+        { id: 'hotwater', label: 'Hot Water Equipment' },
+        { id: 'steam', label: 'Steam Equipment' },
+        { id: 'other', label: 'Other Equipment' }
+    ];
+
+    function renderCategories() {
+        categoryContainer.innerHTML = '';
+        categories.forEach(cat => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+            if (cat.id === activeTab) {
+                item.style.backgroundColor = 'var(--accent-color)';
+                item.style.color = 'white';
+            }
+
+            item.innerHTML = `<div class="text-xs">${cat.label}</div>`;
+
+            item.addEventListener('click', () => {
+                activeTab = cat.id;
+                renderCategories();
+                renderTab();
+            });
+
+            item.addEventListener('mouseenter', () => {
+                if (cat.id !== activeTab) {
+                    item.style.backgroundColor = 'var(--hover-bg)';
+                }
+            });
+
+            item.addEventListener('mouseleave', () => {
+                if (cat.id !== activeTab) {
+                    item.style.backgroundColor = '';
+                }
+            });
+
+            categoryContainer.appendChild(item);
+        });
     }
 
     function getZones() {
-        const { meta } = getMetaAndEP();
-        let zones = [];
-        if (typeof project.getZones === 'function') {
-            zones = project.getZones() || [];
-        } else if (Array.isArray(project.zones)) {
-            zones = project.zones;
-        }
-        if (!Array.isArray(zones) || !zones.length) {
-            return [{ name: 'Zone_1' }];
-        }
-        return zones.map((z, i) => ({
-            name: z.name || `Zone_${i + 1}`,
-        }));
+        // Use project.getZones() if available, or fallback
+        if (typeof project.getZones === 'function') return project.getZones();
+        return project.zones || [];
     }
 
     function getScheduleNames(ep) {
-        const names = new Set([
-            'RM_AlwaysOn',
-            'RM_Office_Occ',
-            'RM_Office_Lighting',
-            'RM_Office_Equipment',
-        ]);
-        const sc = ep.schedules && ep.schedules.compact;
-        if (Array.isArray(sc)) {
-            sc.forEach((s) => {
-                if (s && s.name) names.add(String(s.name));
-            });
-        } else if (sc && typeof sc === 'object') {
-            Object.keys(sc).forEach((nm) => names.add(nm));
+        const names = new Set();
+        if (ep.schedules) {
+            if (ep.schedules.compact) ep.schedules.compact.forEach(s => names.add(s.name));
+            if (ep.schedules.file) ep.schedules.file.forEach(s => names.add(s.name));
+            if (ep.schedules.constant) ep.schedules.constant.forEach(s => names.add(s.name));
+            // Add defaults
+            ['AlwaysOn', 'Office_Occ', 'Office_Light', 'Office_Equip'].forEach(n => names.add(n));
         }
-        return Array.from(names);
+        return Array.from(names).sort();
     }
 
-    function buildIndexes(ep) {
-        const zoneLoadsIndex = new Map();
-        if (Array.isArray(ep.zoneLoads)) {
-            ep.zoneLoads.forEach((zl) => {
-                if (zl && zl.zoneName) {
-                    zoneLoadsIndex.set(String(zl.zoneName), zl);
-                }
-            });
-        }
-        return { zoneLoadsIndex };
-    }
-
-    function fillTemplateScheduleOptions(ep) {
-        const schedNames = getScheduleNames(ep);
-        const templSelects = panel.querySelectorAll('[data-template]');
-        templSelects.forEach((sel) => {
-            if (!(sel instanceof HTMLSelectElement)) return;
-            const key = sel.getAttribute('data-template') || '';
-            sel.innerHTML = '';
-            const allowBlank = key === 'heatSpSched' || key === 'coolSpSched' || key === 'ilAvail';
-            if (allowBlank) {
-                const opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = '(none)';
-                sel.appendChild(opt);
-            }
-            schedNames.forEach((nm) => {
-                const opt = document.createElement('option');
-                opt.value = nm;
-                opt.textContent = nm;
-                sel.appendChild(opt);
-            });
-        });
-    }
-
-    function render() {
-        const { ep } = getMetaAndEP();
+    // Generic renderer for internal gains
+    function renderGenericManager(typeConfig) {
+        const { ep, config } = getConfig(project);
+        const data = config[typeConfig.dataKey] || [];
         const zones = getZones();
-        const schedNames = getScheduleNames(ep);
-        const { zoneLoadsIndex } = buildIndexes(ep);
+        const schedules = getScheduleNames(ep || {});
 
-        // Template selects
-        fillTemplateScheduleOptions(ep);
-
-        tbody.innerHTML = '';
-        zones.forEach((z) => {
-            const zn = String(z.name);
-            const zl = zoneLoadsIndex.get(zn) || {};
-
-            const tr = document.createElement('tr');
-            tr.dataset.zoneName = zn;
-
-            const schedOptions = (selected) => {
-                let html = `<option value="">(none)</option>`;
-                schedNames.forEach((nm) => {
-                    const sel = nm === selected ? ' selected' : '';
-                    html += `<option value="${nm}"${sel}>${nm}</option>`;
-                });
-                return html;
-            };
-
-            const oaMethodOptions = (selected) => {
-                const methods = ['', 'None', 'Sum', 'Flow/Person', 'Flow/Area'];
-                return methods
-                    .map((m) => {
-                        const label = m || '(inherit/global)';
-                        const val = m;
-                        const sel = m === selected ? ' selected' : '';
-                        return `<option value="${val}"${sel}>${label}</option>`;
-                    })
-                    .join('');
-            };
-
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top text-[--accent-color]">${zn}</td>
-
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01"
-                        class="w-full text-xs mb-0.5"
-                        data-field="peoplePerArea"
-                        value="${zl.people?.peoplePerArea ?? ''}">
-                    <select class="w-full text-xs" data-field="peopleSched">
-                        ${schedOptions(zl.people?.schedule || '')}
-                    </select>
-                </td>
-
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.1"
-                        class="w-full text-xs mb-0.5"
-                        data-field="lightsWm2"
-                        value="${zl.lighting?.wattsPerArea ?? ''}">
-                    <select class="w-full text-xs" data-field="lightsSched">
-                        ${schedOptions(zl.lighting?.schedule || '')}
-                    </select>
-                </td>
-
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.1"
-                        class="w-full text-xs mb-0.5"
-                        data-field="equipWm2"
-                        value="${zl.equipment?.wattsPerArea ?? ''}">
-                    <select class="w-full text-xs" data-field="equipSched">
-                        ${schedOptions(zl.equipment?.schedule || '')}
-                    </select>
-                </td>
-
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.1"
-                        class="w-full text-xs mb-0.5"
-                        data-field="infilAch"
-                        value="${zl.infiltration?.ach ?? ''}">
-                    <select class="w-full text-xs" data-field="infilSched">
-                        ${schedOptions(zl.infiltration?.schedule || '')}
-                    </select>
-                </td>
-
+        contentContainer.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold text-sm uppercase">${typeConfig.title}</h3>
+                    <button class="btn btn-xs btn-primary" id="add-item-btn">Add ${typeConfig.itemName}</button>
+                </div>
+                <div class="overflow-x-auto border border-gray-700 rounded bg-black/20">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-black/40 text-[--text-secondary]">
+                            <tr>
+                                <th class="p-2 font-medium">Name</th>
+                                <th class="p-2 font-medium">Zone</th>
+                                <th class="p-2 font-medium">Schedule</th>
+                                <th class="p-2 font-medium">Method</th>
+                                <th class="p-2 font-medium">Value</th>
+                                <th class="p-2 w-20 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700/50">
+                            ${data.map((item, index) => `
+                                <tr class="hover:bg-white/5 transition-colors">
+                                    <td class="p-2">${item.name || '-'}</td>
+                                    <td class="p-2">${item.zoneName || '-'}</td>
+                                    <td class="p-2">${item.scheduleName || '-'}</td>
+                                    <td class="p-2">${item.method || '-'}</td>
+                                    <td class="p-2">${formatValue(item)}</td>
+                                    <td class="p-2 text-right">
+                                        <button class="btn btn-xxs btn-secondary edit-btn mr-1" data-index="${index}">Edit</button>
+                                        <button class="btn btn-xxs btn-danger delete-btn" data-index="${index}">&times;</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                            ${data.length === 0 ? '<tr><td colspan="6" class="p-4 text-center text-[--text-secondary] italic">No items defined.</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
             `;
 
-            tbody.appendChild(tr);
+        // Add Listeners
+        contentContainer.querySelector('#add-item-btn').addEventListener('click', () => {
+            editItem(null, typeConfig, zones, schedules);
+        });
+
+        contentContainer.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                editItem(idx, typeConfig, zones, schedules);
+            });
+        });
+
+        contentContainer.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                if (confirm('Are you sure you want to delete this item?')) {
+                    const newData = [...data];
+                    newData.splice(idx, 1);
+                    typeConfig.setter(project, newData);
+                    renderTab();
+                }
+            });
         });
     }
 
-    function collectTemplateValues() {
-        const obj = {};
-        const root = panel;
-        const num = (sel) => {
-            const el = root.querySelector(`[data-template="${sel}"]`);
-            if (!el) return undefined;
-            const v = parseFloat(el.value);
-            return Number.isFinite(v) ? v : undefined;
-        };
-        const str = (sel) => {
-            const el = root.querySelector(`[data-template="${sel}"]`);
-            if (!el) return undefined;
-            const v = (el.value || '').trim();
-            return v || undefined;
-        };
-
-        obj.peoplePerArea = num('peoplePerArea');
-        obj.lightsWm2 = num('lightsWm2');
-        obj.equipWm2 = num('equipWm2');
-        obj.infilAch = num('infilAch');
-
-        obj.peopleSched = str('peopleSched');
-        obj.lightsSched = str('lightsSched');
-        obj.equipSched = str('equipSched');
-        obj.infilSched = str('infilSched');
-
-        obj.heatSpSched = str('heatSpSched');
-        obj.coolSpSched = str('coolSpSched');
-        obj.ilAvail = str('ilAvail');
-        obj.ilHeatCap = num('ilHeatCap');
-        obj.ilCoolCap = num('ilCoolCap');
-        obj.ilOaMethod = str('ilOaMethod');
-        obj.ilOaPerPerson = num('ilOaPerPerson');
-        obj.ilOaPerArea = num('ilOaPerArea');
-        obj.ilAvail = str('ilAvail');
-        obj.ilHeatCap = num('ilHeatCap');
-        obj.ilCoolCap = num('ilCoolCap');
-        obj.ilOaMethod = str('ilOaMethod');
-        obj.ilOaPerPerson = num('ilOaPerPerson');
-        obj.ilOaPerArea = num('ilOaPerArea');
-
-        return obj;
+    function formatValue(item) {
+        // Helper to show the relevant value based on method
+        if (item.method === 'People') return item.numberPeople;
+        if (item.method === 'People/Area') return item.peoplePerArea;
+        if (item.method === 'Area/Person') return item.areaPerPerson;
+        if (item.method === 'Watts/Area') return item.wattsPerArea;
+        if (item.method === 'Watts/Person') return item.wattsPerPerson;
+        if (item.method === 'Level') return item.lightingLevel || item.designLevel;
+        return '-';
     }
 
-    function applyTemplateToAllZones() {
-        const tmpl = collectTemplateValues();
-        const rows = tbody.querySelectorAll('tr[data-zone-name]');
-        rows.forEach((tr) => {
-            const setVal = (sel, val) => {
-                if (val === undefined) return;
-                const el = tr.querySelector(sel);
-                if (el) el.value = val;
-            };
-            const setNum = (sel, val) => {
-                if (val === undefined) return;
-                const el = tr.querySelector(sel);
-                if (el) el.value = val;
-            };
+    function editItem(index, typeConfig, zones, schedules) {
+        const { config } = getConfig(project);
+        const data = config[typeConfig.dataKey] || [];
+        const item = index !== null ? data[index] : { name: `New ${typeConfig.itemName}`, method: typeConfig.defaultMethod };
+        const isNew = index === null;
 
-            setNum('[data-field="peoplePerArea"]', tmpl.peoplePerArea);
-            setVal('[data-field="peopleSched"]', tmpl.peopleSched);
+        // Generate form fields
+        const renderLabel = (text, tooltip) => {
+            if (!tooltip) return `<label class="label">${text}</label>`;
+            return `
+                <label class="label">
+                    ${text}
+                    <span class="info-icon">i
+                        <span class="info-popover">${tooltip}</span>
+                    </span>
+                </label>
+            `;
+        };
 
-            setNum('[data-field="lightsWm2"]', tmpl.lightsWm2);
-            setVal('[data-field="lightsSched"]', tmpl.lightsSched);
+        const fieldsHtml = typeConfig.fields.map(field => {
+            const val = item[field.key] !== undefined ? item[field.key] : (field.default || '');
+            const tooltip = field.tooltip || '';
 
-            setNum('[data-field="equipWm2"]', tmpl.equipWm2);
-            setVal('[data-field="equipSched"]', tmpl.equipSched);
+            // Visibility logic attributes
+            let wrapperAttrs = 'class="mb-3 field-wrapper"';
+            if (field.visibleWhen) {
+                wrapperAttrs += ` data-visible-when='${JSON.stringify(field.visibleWhen)}'`;
+                // Initial visibility check (simple equality for now)
+                const { key, value } = field.visibleWhen;
+                wrapperAttrs += ` data-visible-when='${JSON.stringify({ key, value })}'`;
+                // Check initial visibility
+                const depVal = item[key];
+                const isVisible = Array.isArray(value) ? value.includes(depVal) : value === depVal;
 
-            setNum('[data-field="infilAch"]', tmpl.infilAch);
-            setVal('[data-field="infilSched"]', tmpl.infilSched);
-        });
-    }
+                // If depVal is undefined (e.g. new item), check against defaultMethod if the dependency key is 'method'
+                const currentMethod = item.method || typeConfig.defaultMethod;
+                const isVisibleForDefault = (key === 'method' && Array.isArray(value) ? value.includes(currentMethod) : value === currentMethod);
 
-    function buildNextConfigFromUI() {
-        const { meta, ep } = getMetaAndEP();
-        const rows = Array.from(
-            tbody.querySelectorAll('tr[data-zone-name]')
-        );
-        const zones = rows.map((tr) => tr.dataset.zoneName);
-
-        const nextZoneLoads = [];
-
-        // Collect per-zone values
-        rows.forEach((tr) => {
-            const zn = tr.dataset.zoneName;
-
-            const num = (sel) => {
-                const el = tr.querySelector(sel);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? v : undefined;
-            };
-            const str = (sel) => {
-                const el = tr.querySelector(sel);
-                if (!el) return undefined;
-                const v = (el.value || '').trim();
-                return v || undefined;
-            };
-
-            const peoplePerArea = num('[data-field="peoplePerArea"]');
-            const peopleSched = str('[data-field="peopleSched"]');
-
-            const lightsWm2 = num('[data-field="lightsWm2"]');
-            const lightsSched = str('[data-field="lightsSched"]');
-
-            const equipWm2 = num('[data-field="equipWm2"]');
-            const equipSched = str('[data-field="equipSched"]');
-
-            const infilAch = num('[data-field="infilAch"]');
-            const infilSched = str('[data-field="infilSched"]');
-
-            if (
-                peoplePerArea != null ||
-                lightsWm2 != null ||
-                equipWm2 != null ||
-                infilAch != null
-            ) {
-                const zl = { zoneName: zn };
-                if (peoplePerArea != null) {
-                    zl.people = {
-                        peoplePerArea,
-                        schedule: peopleSched,
-                    };
+                if (!isVisible && depVal !== undefined) {
+                    wrapperAttrs += ' style="display: none;"';
+                } else if (depVal === undefined && key === 'method' && !isVisibleForDefault) {
+                    wrapperAttrs += ' style="display: none;"';
                 }
-                if (lightsWm2 != null) {
-                    zl.lighting = {
-                        wattsPerArea: lightsWm2,
-                        schedule: lightsSched,
-                    };
-                }
-                if (equipWm2 != null) {
-                    zl.equipment = {
-                        wattsPerArea: equipWm2,
-                        schedule: equipSched,
-                    };
-                }
-                if (infilAch != null) {
-                    zl.infiltration = {
-                        ach: infilAch,
-                        schedule: infilSched,
-                    };
-                }
-                nextZoneLoads.push(zl);
             }
 
-        });
+            if (field.type === 'select') {
+                const options = typeof field.options === 'function' ? field.options(zones, schedules) : field.options; // Pass zones, schedules
+                return `
+                    <div ${wrapperAttrs}>
+                        ${renderLabel(field.label, tooltip)}
+                        <select class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                                data-key="${field.key}">
+                            <option value="">(Select)</option>
+                            ${options.map(o => `<option value="${o.value}" ${o.value == val ? 'selected' : ''}>${o.label}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+            } else if (field.type === 'number') {
+                const minAttr = field.min !== undefined ? `min="${field.min}"` : '';
+                const maxAttr = field.max !== undefined ? `max="${field.max}"` : '';
+                return `
+                    <div ${wrapperAttrs}>
+                        ${renderLabel(field.label, tooltip)}
+                        <input type="number" step="${field.step || 'any'}" ${minAttr}${maxAttr}
+                               class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                               data-key="${field.key}" value="${val}">
+                    </div>
+                `;
+            } else {
+                return `
+                    <div ${wrapperAttrs}>
+                        ${renderLabel(field.label, tooltip)}
+                        <input type="text" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                               data-key="${field.key}" value="${val}">
+                    </div>
+                `;
+            }
+        }).join('');
 
-        const nextConfig = {
-            ...ep,
-            zoneLoads: nextZoneLoads,
+        contentContainer.innerHTML = `
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h3 class="font-semibold text-sm uppercase">${isNew ? 'Add' : 'Edit'}${typeConfig.itemName}</h3>
+                <button class="btn btn-xs btn-secondary" id="cancel-edit-btn">Cancel</button>
+            </div>
+            <div class="space-y-2" id="editor-fields">
+                ${fieldsHtml}
+                <div class="mt-4 pt-4 border-t border-gray-700 flex justify-end gap-2">
+                    <button class="btn btn-sm btn-primary" id="save-item-btn">Save</button>
+                </div>
+            </div>
+        `;
+
+        // Visibility Handler
+        const updateVisibility = () => {
+            const wrappers = contentContainer.querySelectorAll('.field-wrapper[data-visible-when]');
+            wrappers.forEach(wrapper => {
+                const rule = JSON.parse(wrapper.dataset.visibleWhen);
+                const depInput = contentContainer.querySelector(`[data-key="${rule.key}"]`);
+                if (depInput) {
+                    const val = depInput.value;
+                    const isVisible = Array.isArray(rule.value) ? rule.value.includes(val) : rule.value === val;
+                    wrapper.style.display = isVisible ? 'block' : 'none';
+                }
+            });
         };
 
-        return { meta, nextConfig };
-    }
-
-    if (applyTemplateBtn) {
-        applyTemplateBtn.addEventListener('click', () => {
-            applyTemplateToAllZones();
+        // Attach listeners for dependencies
+        contentContainer.querySelectorAll('select[data-key]').forEach(sel => {
+            sel.addEventListener('change', updateVisibility);
         });
-    }
 
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                const { meta, nextConfig } = buildNextConfigFromUI();
-                if (typeof project.updateMetadata === 'function') {
-                    project.updateMetadata({
-                        ...meta,
-                        energyPlusConfig: nextConfig,
-                    });
-                } else {
-                    project.metadata = {
-                        ...(project.metadata || meta),
-                        energyPlusConfig: nextConfig,
-                    };
-                }
-                alert('Zone loads configuration saved.');
-            } catch (err) {
-                console.error('EnergyPlus Zone Manager: save failed', err);
-                alert('Failed to save configuration. Check console for details.');
+        // Initial update
+        updateVisibility();
+
+        contentContainer.querySelector('#cancel-edit-btn').addEventListener('click', () => renderTab());
+        contentContainer.querySelector('#save-item-btn').addEventListener('click', () => {
+            const inputs = contentContainer.querySelectorAll('[data-key]');
+            const newItem = { ...item };
+            inputs.forEach(input => {
+                // Only save if visible (or not dependent)
+                const wrapper = input.closest('.field-wrapper');
+                if (wrapper && wrapper.style.display === 'none') return;
+
+                const key = input.dataset.key;
+                let val = input.value;
+                if (input.type === 'number') val = parseFloat(val);
+                newItem[key] = val;
+            });
+
+            const newData = [...data];
+            if (isNew) {
+                newData.push(newItem);
+            } else {
+                newData[index] = newItem;
             }
+            typeConfig.setter(project, newData);
+            renderTab();
         });
     }
 
-    render();
+    function renderTab() {
+        const zoneOptions = (zones) => zones.map(z => ({ value: z.name, label: z.name }));
+        const schedOptions = (zones, scheds) => scheds.map(s => ({ value: s, label: s }));
 
+        const commonFields = [
+            { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name for this object.' },
+            { key: 'zoneName', label: 'Zone', type: 'select', options: zoneOptions, tooltip: 'The thermal zone this object applies to.' },
+            { key: 'scheduleName', label: 'Schedule', type: 'select', options: schedOptions, tooltip: 'Schedule modifying the design level parameter.' },
+        ];
+
+        const configs = {
+            people: {
+                title: 'People', itemName: 'People Object', dataKey: 'people', setter: setPeople,
+                defaultMethod: 'People',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the number of people.', options: [
+                            { value: 'People', label: 'Number of People' },
+                            { value: 'People/Area', label: 'People per Zone Floor Area' },
+                            { value: 'Area/Person', label: 'Zone Floor Area per Person' }
+                        ]
+                    },
+                    { key: 'numberPeople', label: 'Number of People', type: 'number', min: 0, visibleWhen: { key: 'method', value: 'People' }, tooltip: 'Maximum number of people in the zone.' },
+                    { key: 'peoplePerArea', label: 'People per Area', type: 'number', step: 0.01, min: 0, visibleWhen: { key: 'method', value: 'People/Area' }, tooltip: 'People per square meter of floor area.' },
+                    { key: 'areaPerPerson', label: 'Area per Person', type: 'number', step: 0.01, min: 0, visibleWhen: { key: 'method', value: 'Area/Person' }, tooltip: 'Square meters of floor area per person.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of sensible heat given off as radiant heat (0.0-1.0).' },
+                    { key: 'sensibleHeatFraction', label: 'Sensible Heat Fraction', type: 'number', step: 0.1, min: 0, max: 1, default: 'autocalculate', tooltip: 'Fixed sensible heat fraction. Leave blank for autocalculate.' },
+                    { key: 'activityScheduleName', label: 'Activity Schedule', type: 'select', options: schedOptions, tooltip: 'Schedule defining metabolic rate (W/person).' },
+                ]
+            },
+            lights: {
+                title: 'Lights', itemName: 'Lights Object', dataKey: 'lights', setter: setLights,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the lighting level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Lighting Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Lighting power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Lighting power per person (W/person).' },
+                    { key: 'lightingLevel', label: 'Lighting Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total lighting power (W).' },
+                    { key: 'returnAirFraction', label: 'Return Air Fraction', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat going to return air.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.7, tooltip: 'Fraction of heat entering zone as long-wave radiation.' },
+                    { key: 'fractionVisible', label: 'Fraction Visible', type: 'number', step: 0.1, min: 0, max: 1, default: 0.2, tooltip: 'Fraction of heat entering zone as visible radiation.' },
+                ]
+            },
+            electric: {
+                title: 'Electric Equipment', itemName: 'Equipment', dataKey: 'electricEquipment', setter: setElectricEquipment,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the equipment level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Design Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Equipment power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Equipment power per person (W/person).' },
+                    { key: 'designLevel', label: 'Design Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total equipment power (W).' },
+                    { key: 'fractionLatent', label: 'Fraction Latent', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat given off as latent energy (moisture).' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of heat given off as radiant energy.' },
+                    { key: 'fractionLost', label: 'Fraction Lost', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat lost (vented) from the zone.' },
+                ]
+            },
+            gas: {
+                title: 'Gas Equipment', itemName: 'Gas Equipment', dataKey: 'gasEquipment', setter: setGasEquipment,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the equipment level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Design Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Gas power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Gas power per person (W/person).' },
+                    { key: 'designLevel', label: 'Design Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total gas power (W).' },
+                    { key: 'fractionLatent', label: 'Fraction Latent', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat given off as latent energy.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of heat given off as radiant energy.' },
+                    { key: 'fractionLost', label: 'Fraction Lost', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat lost (vented).' },
+                ]
+            },
+            hotwater: {
+                title: 'Hot Water Equipment', itemName: 'Hot Water Equipment', dataKey: 'hotWaterEquipment', setter: setHotWaterEquipment,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the equipment level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Design Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Hot water power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Hot water power per person (W/person).' },
+                    { key: 'designLevel', label: 'Design Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total hot water power (W).' },
+                    { key: 'fractionLatent', label: 'Fraction Latent', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat given off as latent energy.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of heat given off as radiant energy.' },
+                    { key: 'fractionLost', label: 'Fraction Lost', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat lost (vented).' },
+                ]
+            },
+            steam: {
+                title: 'Steam Equipment', itemName: 'Steam Equipment', dataKey: 'steamEquipment', setter: setSteamEquipment,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the equipment level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Design Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Steam power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Steam power per person (W/person).' },
+                    { key: 'designLevel', label: 'Design Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total steam power (W).' },
+                    { key: 'fractionLatent', label: 'Fraction Latent', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat given off as latent energy.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of heat given off as radiant energy.' },
+                    { key: 'fractionLost', label: 'Fraction Lost', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat lost (vented).' },
+                ]
+            },
+            other: {
+                title: 'Other Equipment', itemName: 'Other Equipment', dataKey: 'otherEquipment', setter: setOtherEquipment,
+                defaultMethod: 'Watts/Area',
+                fields: [
+                    ...commonFields,
+                    {
+                        key: 'method', label: 'Method', type: 'select', tooltip: 'Method for calculating the equipment level.', options: [
+                            { value: 'Watts/Area', label: 'Watts per Zone Floor Area' },
+                            { value: 'Watts/Person', label: 'Watts per Person' },
+                            { value: 'Level', label: 'Design Level' }
+                        ]
+                    },
+                    { key: 'wattsPerArea', label: 'Watts per Area', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Area' }, tooltip: 'Power density (W/m²).' },
+                    { key: 'wattsPerPerson', label: 'Watts per Person', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Watts/Person' }, tooltip: 'Power per person (W/person).' },
+                    { key: 'designLevel', label: 'Design Level', type: 'number', step: 0.1, min: 0, visibleWhen: { key: 'method', value: 'Level' }, tooltip: 'Total power (W).' },
+                    { key: 'fractionLatent', label: 'Fraction Latent', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat given off as latent energy.' },
+                    { key: 'fractionRadiant', label: 'Fraction Radiant', type: 'number', step: 0.1, min: 0, max: 1, default: 0.3, tooltip: 'Fraction of heat given off as radiant energy.' },
+                    { key: 'fractionLost', label: 'Fraction Lost', type: 'number', step: 0.1, min: 0, max: 1, default: 0, tooltip: 'Fraction of heat lost (vented).' },
+                ]
+            }
+        };
+
+        if (configs[activeTab]) {
+            renderGenericManager(configs[activeTab]);
+        }
+    }
+
+    renderCategories();
+    renderTab();
     return panel;
 }
 
@@ -2320,8 +1931,7 @@ function createHvacSizingManagerPanel() {
                         dsoaNames
                             .map(
                                 (n) =>
-                                    `<option value="${n}"${cfg.designSpecOutdoorAirName === n ? ' selected' : ''
-                                    }>${n}</option>`
+                                    `<option value="${n}"${cfg.designSpecOutdoorAirName === n ? ' selected' : ''}>${n}</option>`
                             )
                             .join('');
                     tr.innerHTML = `
@@ -2621,17 +2231,6 @@ function createHvacSizingManagerPanel() {
     });
 
     return panel;
-}
-
-function openDaylightingManagerPanel() {
-    const panelId = 'panel-energyplus-daylighting';
-    let panel = document.getElementById(panelId);
-    if (!panel) {
-        panel = createDaylightingManagerPanel();
-        document.getElementById('window-container').appendChild(panel);
-    }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
 }
 
 function createIdealLoadsManagerPanel() {
@@ -3177,10 +2776,8 @@ function createIdealLoadsManagerPanel() {
                         <select class="w-full text-xs" data-field="type">
                             <option value="SingleHeating"${type === 'SingleHeating' ? ' selected' : ''}>SingleHeating</option>
                             <option value="SingleCooling"${type === 'SingleCooling' ? ' selected' : ''}>SingleCooling</option>
-                            <option value="SingleHeatingOrCooling"${type === 'SingleHeatingOrCooling' ? ' selected' : ''
-                    }>SingleHeatingOrCooling</option>
-                            <option value="DualSetpoint"${type === 'DualSetpoint' || !type ? ' selected' : ''
-                    }>DualSetpoint</option>
+                            <option value="SingleHeatingOrCooling"${type === 'SingleHeatingOrCooling' ? ' selected' : ''}>SingleHeatingOrCooling</option>
+                            <option value="DualSetpoint"${type === 'DualSetpoint' || !type ? ' selected' : ''}>DualSetpoint</option>
                         </select>
                     </td>
                     <td class="px-1 py-1 align-top">
@@ -3866,619 +3463,29 @@ function openIdealLoadsManagerPanel() {
     panel.style.zIndex = getNewZIndex();
 }
 
-function openOutdoorAirManagerPanel() {
-    const panelId = 'panel-energyplus-outdoor-air';
-    let panel = document.getElementById(panelId);
-    if (!panel) {
-        panel = createOutdoorAirManagerPanel();
-        document.getElementById('window-container').appendChild(panel);
-    }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
-}
 
-/**
- * Outdoor Air & Ventilation Manager
- * - DesignSpecification:OutdoorAir (energyPlusConfig.outdoorAir.designSpecs)
- * - Natural Ventilation via ZoneVentilation:DesignFlowRate (energyPlusConfig.naturalVentilation)
- */
-function createOutdoorAirManagerPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'panel-energyplus-outdoor-air';
-    panel.className = 'floating-window ui-panel resizable-panel';
 
-    panel.innerHTML = `
-        <div class="window-header">
-            <span>Outdoor Air & Ventilation</span>
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
-            </div>
-        </div>
-        <div class="window-content space-y-3 text-xs">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure outdoor air design specs and simple natural ventilation.
-                Settings are stored in <code>energyPlusConfig.outdoorAir</code> and
-                <code>energyPlusConfig.naturalVentilation</code> and consumed by the model builder.
-                If left empty, no additional DesignSpecification:OutdoorAir or ZoneVentilation objects are emitted.
-            </p>
-
-            <!-- DesignSpecification:OutdoorAir -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Outdoor Air Design Specs (DesignSpecification:OutdoorAir)
-                    </span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-dsoa">+ Add Design Spec</button>
-                </div>
-                <div class="max-h-40 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Name</th>
-                                <th class="px-1 py-1 text-left">Method</th>
-                                <th class="px-1 py-1 text-left">Flow/Person</th>
-                                <th class="px-1 py-1 text-left">Flow/Area</th>
-                                <th class="px-1 py-1 text-left">Flow/Zone</th>
-                                <th class="px-1 py-1 text-left">ACH</th>
-                                <th class="px-1 py-1 text-left">Schedule</th>
-                                <th class="px-1 py-1 text-left">Min OA Frac Sched</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="dsoa-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary] mt-1">
-                    Refer to these specs from HVAC Sizing and IdealLoads configuration (e.g. DesignSpecification:OutdoorAir Name).
-                </p>
-            </div>
-
-            <!-- Natural Ventilation (ZoneVentilation:DesignFlowRate) -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-2">
-                <div class="font-semibold text-xs uppercase text-[--text-secondary]">
-                    Natural Ventilation (ZoneVentilation:DesignFlowRate)
-                </div>
-
-                <!-- Global defaults -->
-                <div class="space-y-1">
-                    <label class="inline-flex items-center gap-1">
-                        <input type="checkbox" data-field="nv-global-enabled">
-                        <span>Enable global natural ventilation</span>
-                    </label>
-                    <div class="grid grid-cols-5 gap-1 mt-1">
-                        <div>
-                            <label class="label !text-xs">Method</label>
-                            <select class="w-full" data-field="nv-global-method">
-                                <option value="">(none)</option>
-                                <option value="Flow/Zone">Flow/Zone</option>
-                                <option value="Flow/Area">Flow/Area</option>
-                                <option value="Flow/Person">Flow/Person</option>
-                                <option value="AirChanges/Hour">AirChanges/Hour</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Flow/Zone [m³/s]</label>
-                            <input type="number" step="0.001" class="w-full" data-field="nv-global-flowZone">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Flow/Area [m³/s-m²]</label>
-                            <input type="number" step="0.0001" class="w-full" data-field="nv-global-flowArea">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Flow/Person [m³/s-person]</label>
-                            <input type="number" step="0.0001" class="w-full" data-field="nv-global-flowPerson">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">ACH [1/h]</label>
-                            <input type="number" step="0.01" class="w-full" data-field="nv-global-ach">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-6 gap-1 mt-1">
-                        <div>
-                            <label class="label !text-xs">Type</label>
-                            <select class="w-full" data-field="nv-global-type">
-                                <option value="">(Natural)</option>
-                                <option value="Natural">Natural</option>
-                                <option value="Exhaust">Exhaust</option>
-                                <option value="Intake">Intake</option>
-                                <option value="Balanced">Balanced</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Min Tin [°C]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-minTin">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Max Tin [°C]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-maxTin">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Min Tout [°C]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-minTout">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Max Tout [°C]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-maxTout">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">ΔT (Tin-Tout) [K]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-deltaT">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-4 gap-1 mt-1">
-                        <div>
-                            <label class="label !text-xs">Max Wind [m/s]</label>
-                            <input type="number" step="0.1" class="w-full" data-field="nv-global-maxWind">
-                        </div>
-                        <div>
-                            <label class="label !text-xs">Density Basis</label>
-                            <select class="w-full" data-field="nv-global-density">
-                                <option value="">(default)</option>
-                                <option value="Outdoor">Outdoor</option>
-                                <option value="Indoor">Indoor</option>
-                                <option value="Standard">Standard</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Per-zone overrides -->
-                <div class="border border-gray-700/70 rounded bg-black/30 p-1 space-y-1">
-                    <div class="font-semibold text-xs text-[--text-secondary]">
-                        Per-Zone Overrides
-                    </div>
-                    <div class="max-h-40 overflow-y-auto scrollable-panel-inner">
-                        <table class="w-full text-xs">
-                            <thead class="bg-black/40">
-                                <tr>
-                                    <th class="px-1 py-1 text-left">Zone</th>
-                                    <th class="px-1 py-1 text-left">Override</th>
-                                    <th class="px-1 py-1 text-left">Enable</th>
-                                    <th class="px-1 py-1 text-left">Method</th>
-                                    <th class="px-1 py-1 text-left">Flow/Zone</th>
-                                    <th class="px-1 py-1 text-left">Flow/Area</th>
-                                    <th class="px-1 py-1 text-left">Flow/Person</th>
-                                    <th class="px-1 py-1 text-left">ACH</th>
-                                </tr>
-                            </thead>
-                            <tbody class="nv-zones-tbody"></tbody>
-                        </table>
-                    </div>
-                    <p class="text-xs text-[--text-secondary]">
-                        Only rows with "Override" checked and at least one field set are saved.
-                        Zones without overrides inherit the global settings if enabled.
-                    </p>
-                </div>
-
-                <div class="flex justify-end">
-                    <button class="btn btn-xxs btn-secondary" data-action="save-outdoor-air">
-                        Save Outdoor Air & Ventilation
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
-    } else {
-        const closeBtn = panel.querySelector('.window-icon-close');
-        if (closeBtn) {
-            closeBtn.onclick = () => panel.classList.add('hidden');
-        }
-    }
-
-    // Wire data loading/saving via energyplusConfigService
-    import('./energyplusConfigService.js')
-        .then(({ getConfig, setOutdoorAirDesignSpecs, setNaturalVentilation }) => {
-            const dsoaTbody = panel.querySelector('.dsoa-tbody');
-            const nvZonesTbody = panel.querySelector('.nv-zones-tbody');
-            const addDsoaBtn = panel.querySelector('[data-action="add-dsoa"]');
-            const saveBtn = panel.querySelector('[data-action="save-outdoor-air"]');
-
-            function getZones() {
-                let zs = [];
-                if (typeof project.getZones === 'function') {
-                    zs = project.getZones() || [];
-                } else if (Array.isArray(project.zones)) {
-                    zs = project.zones;
-                }
-                if (!Array.isArray(zs) || !zs.length) {
-                    return [{ name: 'Zone_1' }];
-                }
-                return zs.map((z, i) => ({
-                    name: z.name || `Zone_${i + 1}`,
-                }));
-            }
-
-            function loadState() {
-                const { config } = getConfig(project);
-                const oa = config.outdoorAir || {};
-                const nat = config.naturalVentilation || {};
-                return {
-                    designSpecs: Array.isArray(oa.designSpecs) ? oa.designSpecs.slice() : [],
-                    naturalVentilation: nat,
-                };
-            }
-
-            function renderDsoa() {
-                const { designSpecs } = loadState();
-                dsoaTbody.innerHTML = '';
-                if (!designSpecs.length) {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td class="px-1 py-1 text-white" colspan="9">
-                            No DesignSpecification:OutdoorAir defined.
-                        </td>
-                    `;
-                    dsoaTbody.appendChild(tr);
-                    return;
-                }
-                designSpecs.forEach((d, idx) => {
-                    const tr = document.createElement('tr');
-                    tr.dataset.index = String(idx);
-                    tr.innerHTML = `
-                        <td class="px-1 py-1 align-top">
-                            <input class="w-full" data-field="name" value="${d.name || ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <select class="w-full" data-field="method">
-                                ${[
-                            '',
-                            'Flow/Person',
-                            'Flow/Area',
-                            'Flow/Zone',
-                            'AirChanges/Hour',
-                            'Sum',
-                            'Maximum',
-                        ]
-                            .map((m) => {
-                                const label = m || '(auto)';
-                                const sel = d.method === m ? ' selected' : '';
-                                return `<option value="${m}"${sel}>${label}</option>`;
-                            })
-                            .join('')}
-                            </select>
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.0001" class="w-full" data-field="flowPerPerson" value="${d.flowPerPerson ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.0001" class="w-full" data-field="flowPerArea" value="${d.flowPerArea ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.0001" class="w-full" data-field="flowPerZone" value="${d.flowPerZone ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.01" class="w-full" data-field="ach" value="${d.airChangesPerHour ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input class="w-full" data-field="sched" value="${d.scheduleName || ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input class="w-full" data-field="minFracSched" value="${d.proportionalMinOAFractionScheduleName || ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top text-right">
-                            <button class="btn btn-xxs btn-danger" data-action="delete-dsoa">Del</button>
-                        </td>
-                    `;
-                    dsoaTbody.appendChild(tr);
-                });
-
-                dsoaTbody.querySelectorAll('button[data-action="delete-dsoa"]').forEach((btn, idx) => {
-                    btn.addEventListener('click', () => {
-                        const { designSpecs } = loadState();
-                        designSpecs.splice(idx, 1);
-                        setOutdoorAirDesignSpecs(project, designSpecs);
-                        renderDsoa();
-                    });
-                });
-            }
-
-            function renderNaturalVentilation() {
-                const { naturalVentilation } = loadState();
-                const zones = getZones();
-                const global = naturalVentilation.global || {};
-                const perZone = Array.isArray(naturalVentilation.perZone)
-                    ? naturalVentilation.perZone
-                    : [];
-
-                // Global
-                const gEnabled = !!global.enabled;
-                const set = (sel, v) => {
-                    const el = panel.querySelector(sel);
-                    if (!el) return;
-                    if (el.type === 'checkbox') el.checked = !!v;
-                    else el.value = v != null ? String(v) : '';
-                };
-
-                set('[data-field="nv-global-enabled"]', gEnabled);
-                set('[data-field="nv-global-method"]', global.calculationMethod || '');
-                set('[data-field="nv-global-flowZone"]', global.designFlowRate);
-                set('[data-field="nv-global-flowArea"]', global.flowPerArea);
-                set('[data-field="nv-global-flowPerson"]', global.flowPerPerson);
-                set('[data-field="nv-global-ach"]', global.airChangesPerHour);
-                set('[data-field="nv-global-type"]', global.ventilationType || '');
-                set('[data-field="nv-global-minTin"]', global.minIndoorTemp);
-                set('[data-field="nv-global-maxTin"]', global.maxIndoorTemp);
-                set('[data-field="nv-global-minTout"]', global.minOutdoorTemp);
-                set('[data-field="nv-global-maxTout"]', global.maxOutdoorTemp);
-                set('[data-field="nv-global-deltaT"]', global.deltaTemp);
-                set('[data-field="nv-global-maxWind"]', global.maxWindSpeed);
-                set('[data-field="nv-global-density"]', global.densityBasis || '');
-
-                // Per-zone
-                nvZonesTbody.innerHTML = '';
-                zones.forEach((z) => {
-                    const zn = String(z.name);
-                    const entry = perZone.find((p) => p.zoneName === zn) || {};
-                    const tr = document.createElement('tr');
-                    tr.dataset.zoneName = zn;
-                    tr.innerHTML = `
-                        <td class="px-1 py-1 align-top text-[--accent-color]">${zn}</td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="checkbox" data-field="override" ${entry.zoneName ? 'checked' : ''}>
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="checkbox" data-field="enabled" ${entry.enabled ? 'checked' : ''}>
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <select class="w-full" data-field="method">
-                                ${[
-                            '',
-                            'Flow/Zone',
-                            'Flow/Area',
-                            'Flow/Person',
-                            'AirChanges/Hour',
-                        ]
-                            .map((m) => {
-                                const label = m || '(inherit)';
-                                const sel = entry.calculationMethod === m ? ' selected' : '';
-                                return `<option value="${m}"${sel}>${label}</option>`;
-                            })
-                            .join('')}
-                            </select>
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.001" class="w-full" data-field="flowZone" value="${entry.designFlowRate ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.0001" class="w-full" data-field="flowArea" value="${entry.flowPerArea ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.0001" class="w-full" data-field="flowPerson" value="${entry.flowPerPerson ?? ''}">
-                        </td>
-                        <td class="px-1 py-1 align-top">
-                            <input type="number" step="0.01" class="w-full" data-field="ach" value="${entry.airChangesPerHour ?? ''}">
-                        </td>
-                    `;
-                    nvZonesTbody.appendChild(tr);
-                });
-            }
-
-            function collectDsoaFromUI() {
-                const rows = dsoaTbody.querySelectorAll('tr');
-                const specs = [];
-                rows.forEach((tr) => {
-                    const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-                    if (!name) return;
-                    const method = (tr.querySelector('[data-field="method"]')?.value || '').trim();
-                    const num = (field) => {
-                        const el = tr.querySelector(field);
-                        if (!el) return undefined;
-                        const v = parseFloat(el.value);
-                        return Number.isFinite(v) ? v : undefined;
-                    };
-                    const sched = (tr.querySelector('[data-field="sched"]')?.value || '').trim();
-                    const minFracSched = (tr.querySelector('[data-field="minFracSched"]')?.value || '').trim();
-                    const spec = { name };
-                    if (method) spec.method = method;
-                    const fpp = num('[data-field="flowPerPerson"]');
-                    if (fpp != null) spec.flowPerPerson = fpp;
-                    const fpa = num('[data-field="flowPerArea"]');
-                    if (fpa != null) spec.flowPerArea = fpa;
-                    const fpz = num('[data-field="flowPerZone"]');
-                    if (fpz != null) spec.flowPerZone = fpz;
-                    const ach = num('[data-field="ach"]');
-                    if (ach != null) spec.airChangesPerHour = ach;
-                    if (sched) spec.scheduleName = sched;
-                    if (minFracSched) spec.proportionalMinOAFractionScheduleName = minFracSched;
-                    specs.push(spec);
-                });
-                return specs;
-            }
-
-            function collectNaturalVentilationFromUI() {
-                const nv = {};
-
-                const gEnabled = panel.querySelector('[data-field="nv-global-enabled"]')?.checked;
-                if (gEnabled) {
-                    const method = (panel.querySelector('[data-field="nv-global-method"]')?.value || '').trim();
-                    const num = (sel) => {
-                        const el = panel.querySelector(sel);
-                        if (!el) return undefined;
-                        const v = parseFloat(el.value);
-                        return Number.isFinite(v) ? v : undefined;
-                    };
-                    const val = (sel) => {
-                        const el = panel.querySelector(sel);
-                        return (el && el.value || '').trim() || undefined;
-                    };
-                    const global = { enabled: true };
-                    if (method) global.calculationMethod = method;
-                    const fz = num('[data-field="nv-global-flowZone"]');
-                    if (fz != null) global.designFlowRate = fz;
-                    const fa = num('[data-field="nv-global-flowArea"]');
-                    if (fa != null) global.flowPerArea = fa;
-                    const fp = num('[data-field="nv-global-flowPerson"]');
-                    if (fp != null) global.flowPerPerson = fp;
-                    const ach = num('[data-field="nv-global-ach"]');
-                    if (ach != null) global.airChangesPerHour = ach;
-                    const vt = val('[data-field="nv-global-type"]');
-                    if (vt) global.ventilationType = vt;
-                    const minTin = num('[data-field="nv-global-minTin"]');
-                    if (minTin != null) global.minIndoorTemp = minTin;
-                    const maxTin = num('[data-field="nv-global-maxTin"]');
-                    if (maxTin != null) global.maxIndoorTemp = maxTin;
-                    const minTout = num('[data-field="nv-global-minTout"]');
-                    if (minTout != null) global.minOutdoorTemp = minTout;
-                    const maxTout = num('[data-field="nv-global-maxTout"]');
-                    if (maxTout != null) global.maxOutdoorTemp = maxTout;
-                    const dT = num('[data-field="nv-global-deltaT"]');
-                    if (dT != null) global.deltaTemp = dT;
-                    const maxWind = num('[data-field="nv-global-maxWind"]');
-                    if (maxWind != null) global.maxWindSpeed = maxWind;
-                    const dens = val('[data-field="nv-global-density"]');
-                    if (dens) global.densityBasis = dens;
-                    nv.global = global;
-                }
-
-                const perZone = [];
-                nvZonesTbody.querySelectorAll('tr[data-zone-name]').forEach((tr) => {
-                    const zn = tr.dataset.zoneName;
-                    const override = tr.querySelector('[data-field="override"]')?.checked;
-                    if (!override || !zn) return;
-                    const enabled = tr.querySelector('[data-field="enabled"]')?.checked;
-                    const method = (tr.querySelector('[data-field="method"]')?.value || '').trim();
-                    const num = (sel) => {
-                        const el = tr.querySelector(sel);
-                        if (!el) return undefined;
-                        const v = parseFloat(el.value);
-                        return Number.isFinite(v) ? v : undefined;
-                    };
-                    const entry = { zoneName: zn };
-                    if (enabled) entry.enabled = true;
-                    if (method) entry.calculationMethod = method;
-                    const fz = num('[data-field="flowZone"]');
-                    if (fz != null) entry.designFlowRate = fz;
-                    const fa = num('[data-field="flowArea"]');
-                    if (fa != null) entry.flowPerArea = fa;
-                    const fp = num('[data-field="flowPerson"]');
-                    if (fp != null) entry.flowPerPerson = fp;
-                    const ach = num('[data-field="ach"]');
-                    if (ach != null) entry.airChangesPerHour = ach;
-
-                    // Only keep if there is at least one meaningful override
-                    if (
-                        entry.enabled ||
-                        entry.calculationMethod ||
-                        entry.designFlowRate != null ||
-                        entry.flowPerArea != null ||
-                        entry.flowPerPerson != null ||
-                        entry.airChangesPerHour != null
-                    ) {
-                        perZone.push(entry);
-                    }
-                });
-
-                if (perZone.length) {
-                    nv.perZone = perZone;
-                }
-
-                return nv;
-            }
-
-            function addDsoaRow() {
-                // Append a blank row; actual persistence happens on Save.
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="px-1 py-1 align-top">
-                        <input class="w-full" data-field="name" placeholder="Name">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <select class="w-full" data-field="method">
-                            <option value="">(auto)</option>
-                            <option value="Flow/Person">Flow/Person</option>
-                            <option value="Flow/Area">Flow/Area</option>
-                            <option value="Flow/Zone">Flow/Zone</option>
-                            <option value="AirChanges/Hour">AirChanges/Hour</option>
-                            <option value="Sum">Sum</option>
-                            <option value="Maximum">Maximum</option>
-                        </select>
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input type="number" step="0.0001" class="w-full" data-field="flowPerPerson">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input type="number" step="0.0001" class="w-full" data-field="flowPerArea">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input type="number" step="0.0001" class="w-full" data-field="flowPerZone">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input type="number" step="0.01" class="w-full" data-field="ach">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input class="w-full" data-field="sched">
-                    </td>
-                    <td class="px-1 py-1 align-top">
-                        <input class="w-full" data-field="minFracSched">
-                    </td>
-                    <td class="px-1 py-1 align-top text-right">
-                        <button class="btn btn-xxs btn-danger" data-action="delete-dsoa">Del</button>
-                    </td>
-                `;
-                dsoaTbody.appendChild(tr);
-                const del = tr.querySelector('button[data-action="delete-dsoa"]');
-                if (del) {
-                    del.addEventListener('click', () => tr.remove());
-                }
-            }
-
-            // Initial render
-            renderDsoa();
-            renderNaturalVentilation();
-
-            if (addDsoaBtn) {
-                addDsoaBtn.addEventListener('click', () => {
-                    addDsoaRow();
-                });
-            }
-
-            if (saveBtn) {
-                saveBtn.addEventListener('click', () => {
-                    try {
-                        const specs = collectDsoaFromUI();
-                        const nv = collectNaturalVentilationFromUI();
-                        setOutdoorAirDesignSpecs(project, specs);
-                        setNaturalVentilation(project, nv);
-                        alert('Outdoor Air & Ventilation configuration saved.');
-                        renderDsoa();
-                        renderNaturalVentilation();
-                    } catch (err) {
-                        console.error('OutdoorAirManager: save failed', err);
-                        alert('Failed to save Outdoor Air & Ventilation configuration. Check console for details.');
-                    }
-                });
-            }
-        })
-        .catch((err) => {
-            console.error('OutdoorAirManager: failed to load config service', err);
-        });
-
-    return panel;
-}
 
 function openShadingManagerPanel() {
     const panelId = 'panel-energyplus-shading';
+    const btnId = 'toggle-panel-shading-btn';
+    const dom = getDom();
+    const btn = dom[btnId] || document.getElementById(btnId);
+
     let panel = document.getElementById(panelId);
     if (!panel) {
         panel = createShadingManagerPanel();
         document.getElementById('window-container').appendChild(panel);
     }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
+
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        panel.style.zIndex = getNewZIndex();
+        if (btn) btn.classList.add('active');
+    } else {
+        panel.classList.add('hidden');
+        if (btn) btn.classList.remove('active');
+    }
 }
 
 /**
@@ -4490,21 +3497,21 @@ function openShadingManagerPanel() {
  *      name: string,
  *      type?: 'Site' | 'Building',
  *      transmittanceScheduleName?: string,
- *      vertices: Array<{ x: number, y: number, z: number }>
- *    }>,
+ *      vertices: Array<{ x: number, y: number, z: number}>
+ *}>,
  *    zoneSurfaces?: Array<{
  *      name: string,
  *      baseSurfaceName: string,
  *      transmittanceScheduleName?: string,
- *      vertices: Array<{ x: number, y: number, z: number }>
- *    }>,
+ *      vertices: Array<{ x: number, y: number, z: number}>
+ *}>,
  *    reflectance?: Array<{
  *      shadingSurfaceName: string,
  *      solarReflectance?: number,
  *      visibleReflectance?: number,
  *      infraredHemisphericalEmissivity?: number,
  *      infraredTransmittance?: number
- *    }>,
+ *}>,
  *    windowShadingControls?: Array<{
  *      name: string,
  *      shadingType: string,
@@ -4515,8 +3522,8 @@ function openShadingManagerPanel() {
  *      glareControlIsActive?: boolean,
  *      multipleSurfaceControlType?: string,
  *      fenestrationSurfaceNames: string[]
- *    }>
- *  }
+ *}>
+ *}
  *
  * If shading is empty/missing, builder behavior is unchanged.
  */
@@ -4524,6 +3531,8 @@ function createShadingManagerPanel() {
     const panel = document.createElement('div');
     panel.id = 'panel-energyplus-shading';
     panel.className = 'floating-window ui-panel resizable-panel';
+    panel.style.width = '700px';
+    panel.style.height = '600px';
 
     panel.innerHTML = `
         <div class="window-header">
@@ -4534,7 +3543,7 @@ function createShadingManagerPanel() {
                 <div class="window-icon-close" title="Close"></div>
             </div>
         </div>
-        <div class="window-content space-y-3 text-xs">
+        <div class="window-content" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
             <div class="resize-handle-edge top"></div>
             <div class="resize-handle-edge right"></div>
             <div class="resize-handle-edge bottom"></div>
@@ -4544,139 +3553,21 @@ function createShadingManagerPanel() {
             <div class="resize-handle-corner bottom-left"></div>
             <div class="resize-handle-corner bottom-right"></div>
 
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure explicit shading geometry, reflectance, and window shading controls.
-                Settings are stored in <code>energyPlusConfig.shading</code> and consumed directly by the EnergyPlus model builder.
-                If left empty, no additional shading objects are emitted.
-            </p>
+            <div style="display: flex; flex: 1; overflow: hidden;">
+                <!-- Left Sidebar: Category List -->
+                <div style="width: 200px; border-right: 1px solid var(--grid-color); display: flex; flex-direction: column;">
+                    <div style="padding: 0.5rem; border-bottom: 1px solid var(--grid-color);">
+                        <span class="label">Categories</span>
+                    </div>
+                    <div id="shading-categories" class="scrollable-panel-inner" style="flex: 1; overflow-y: auto;">
+                        <!-- Categories injected here -->
+                    </div>
+                </div>
 
-            <!-- Site / Building Shading Surfaces (Shading:Site:Detailed / Shading:Building:Detailed) -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Surface / Zone Optical Properties
-                    </span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-surface-opt">
-                        + Add Entry
-                    </button>
+                <!-- Right Content: Editor -->
+                <div id="shading-content" style="flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;">
+                    <!-- Dynamic Content -->
                 </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-40 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Name</th>
-                                <th class="px-1 py-1 text-left">Type</th>
-                                <th class="px-1 py-1 text-left">Transmittance Schedule</th>
-                                <th class="px-1 py-1 text-left">#Vertices</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="shading-site-surfaces-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary]">
-                    Defines <code>Shading:Site:Detailed</code> and <code>Shading:Building:Detailed</code> surfaces.
-                    Each surface requires a name, type, and at least 3 vertices.
-                </p>
-            </div>
-
-            <!-- Zone Shading Surfaces (Shading:Zone:Detailed) -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Zone Shading Surfaces (Shading:Zone:Detailed)
-                    </span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-zone-surface">
-                        + Add Zone Surface
-                    </button>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-32 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Name</th>
-                                <th class="px-1 py-1 text-left">Base Surface</th>
-                                <th class="px-1 py-1 text-left">Transmittance Schedule</th>
-                                <th class="px-1 py-1 text-left">#Vertices</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="shading-zone-surfaces-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary]">
-                    Defines <code>Shading:Zone:Detailed</code> attached to existing base surfaces.
-                </p>
-            </div>
-
-            <!-- ShadingProperty:Reflectance -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Shading Surface Reflectance (ShadingProperty:Reflectance)
-                    </span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-reflectance">
-                        + Add Reflectance
-                    </button>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-32 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Shading Surface Name</th>
-                                <th class="px-1 py-1 text-left">Solar Refl.</th>
-                                <th class="px-1 py-1 text-left">Visible Refl.</th>
-                                <th class="px-1 py-1 text-left">IR Emiss.</th>
-                                <th class="px-1 py-1 text-left">IR Trans.</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="shading-reflectance-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary]">
-                    Binds optical properties to named shading surfaces.
-                </p>
-            </div>
-
-            <!-- Window Shading Controls (WindowShadingControl) -->
-            <div class="border border-gray-700/70 rounded bg-black/40 p-2 space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">
-                        Window Shading Controls
-                    </span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-window-control">
-                        + Add Control
-                    </button>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-40 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Name</th>
-                                <th class="px-1 py-1 text-left">Shading Type</th>
-                                <th class="px-1 py-1 text-left">Control Type</th>
-                                <th class="px-1 py-1 text-left">Schedule</th>
-                                <th class="px-1 py-1 text-left">Setpoint 1</th>
-                                <th class="px-1 py-1 text-left">Setpoint 2</th>
-                                <th class="px-1 py-1 text-left">Glare Active</th>
-                                <th class="px-1 py-1 text-left">Multi-Surface Type</th>
-                                <th class="px-1 py-1 text-left">Fenestration Names (comma-separated)</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="shading-window-controls-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary]">
-                    Directly defines <code>WindowShadingControl</code> objects. All referenced fenestration surfaces must exist in the IDF.
-                </p>
-            </div>
-
-            <div class="flex justify-end">
-                <button class="btn btn-xxs btn-secondary" data-action="save-shading">
-                    Save Shading & Solar Control
-                </button>
             </div>
         </div>
     `;
@@ -4690,21 +3581,178 @@ function createShadingManagerPanel() {
         }
     }
 
-    const siteSurfacesTbody = panel.querySelector('.shading-site-surfaces-tbody');
-    const zoneSurfacesTbody = panel.querySelector('.shading-zone-surfaces-tbody');
-    const reflectanceTbody = panel.querySelector('.shading-reflectance-tbody');
-    const windowControlsTbody = panel.querySelector('.shading-window-controls-tbody');
-    const addSiteSurfaceBtn = panel.querySelector('[data-action="add-surface-opt"]');
-    const addZoneSurfaceBtn = panel.querySelector('[data-action="add-zone-surface"]');
-    const addReflectanceBtn = panel.querySelector('[data-action="add-reflectance"]');
-    const addWinCtrlBtn = panel.querySelector('[data-action="add-window-control"]');
-    const saveBtn = panel.querySelector('[data-action="save-shading"]');
+    const categoryContainer = panel.querySelector('#shading-categories');
+    const contentContainer = panel.querySelector('#shading-content');
+    let activeTab = 'siteSurfaces';
+
+    // --- CONFIGURATION SCHEMA ---
+
+    const configs = {
+        siteSurfaces: {
+            title: 'Detached Shading (Site/Building)',
+            itemName: 'Shading Surface',
+            dataKey: 'siteSurfaces',
+            description: 'Shading surfaces outside the building that cast shadows (e.g., trees, neighboring buildings).',
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name for the shading surface.' },
+                {
+                    key: 'type', label: 'Type', type: 'select', options: [
+                        { value: 'Site', label: 'Site (Fixed)' },
+                        { value: 'Building', label: 'Building (Rotates with Building)' }
+                    ], tooltip: 'Site surfaces are fixed in the world. Building surfaces rotate with the building.'
+                },
+                { key: 'transmittanceScheduleName', label: 'Transmittance Schedule', type: 'text', tooltip: 'Schedule defining transmittance (0.0=opaque, 1.0=transparent). Default is opaque.' }
+            ]
+        },
+        zoneSurfaces: {
+            title: 'Attached Shading (Zone Detailed)',
+            itemName: 'Shading Surface',
+            dataKey: 'zoneSurfaces',
+            description: 'Shading surfaces attached to specific zones or base surfaces (e.g., balconies, wings).',
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name for the shading surface.' },
+                { key: 'baseSurfaceName', label: 'Base Surface', type: 'text', tooltip: 'Name of the base surface this shading is attached to.' },
+                { key: 'transmittanceScheduleName', label: 'Transmittance Schedule', type: 'text', tooltip: 'Schedule defining transmittance (0.0=opaque, 1.0=transparent).' }
+            ]
+        },
+        overhangsFins: {
+            title: 'Overhangs & Fins',
+            itemName: 'Device',
+            dataKey: 'overhangsFins',
+            description: 'Simplified shading devices attached to specific windows or doors.',
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name for this shading device.' },
+                {
+                    key: 'type', label: 'Type', type: 'select', options: [
+                        { value: 'Overhang', label: 'Overhang' },
+                        { value: 'Overhang:Projection', label: 'Overhang:Projection' },
+                        { value: 'Fin', label: 'Fin' },
+                        { value: 'Fin:Projection', label: 'Fin:Projection' }
+                    ], tooltip: 'Type of shading device.'
+                },
+                { key: 'windowOrDoorName', label: 'Window/Door Name', type: 'text', tooltip: 'Name of the window or door this device is attached to.' },
+                { key: 'params', label: 'Parameters', type: 'text', tooltip: 'Comma-separated parameters specific to the type (e.g., Height, Angle, Left/Right Extension).' }
+            ]
+        },
+        reflectance: {
+            title: 'Shading Surface Reflectance',
+            itemName: 'Reflectance Property',
+            dataKey: 'reflectance',
+            description: 'Reflectance properties for shading surfaces when solar reflection is calculated.',
+            fields: [
+                { key: 'shadingSurfaceName', label: 'Surface Name', type: 'text', tooltip: 'Name of the shading surface these properties apply to.' },
+                { key: 'solarReflectance', label: 'Solar Reflectance', type: 'number', step: 0.01, min: 0, max: 1, tooltip: 'Solar reflectance (0.0-1.0).' },
+                { key: 'visibleReflectance', label: 'Visible Reflectance', type: 'number', step: 0.01, min: 0, max: 1, tooltip: 'Visible reflectance (0.0-1.0).' },
+                { key: 'fractionOfGlazing', label: 'Glazed Fraction', type: 'number', step: 0.01, min: 0, max: 1, tooltip: 'Fraction of the surface area that is glazed (0.0-1.0).' }
+            ]
+        },
+        windowShadingControls: {
+            title: 'Window Shading Controls',
+            itemName: 'Control',
+            dataKey: 'windowShadingControls',
+            description: 'Control logic for movable shading devices (e.g., blinds, shades).',
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name for this control.' },
+                { key: 'shadingType', label: 'Shading Type', type: 'text', tooltip: 'Type of shading device (e.g., InteriorShade, ExteriorScreen).' },
+                { key: 'controlType', label: 'Control Type', type: 'text', tooltip: 'Control logic (e.g., OnIfHighSolarOnWindow).' },
+                { key: 'setpoint', label: 'Setpoint', type: 'number', step: 0.1, tooltip: 'Setpoint value for the control type (e.g., W/m2 for solar).' },
+                { key: 'scheduleName', label: 'Schedule', type: 'text', tooltip: 'Schedule enabling/disabling the control.' }
+            ]
+        },
+        frameDividers: {
+            title: 'Frame & Divider',
+            itemName: 'Frame/Divider',
+            dataKey: 'frameDividers',
+            description: 'Properties for window frames and dividers.',
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', tooltip: 'Unique name.' },
+                { key: 'frameWidth', label: 'Frame Width', type: 'number', step: 0.001, tooltip: 'Width of the frame [m].' },
+                {
+                    key: 'dividerType', label: 'Divider Type', type: 'select', options: [
+                        { value: 'Divided', label: 'Divided' },
+                        { value: 'Suspended', label: 'Suspended' }
+                    ], tooltip: 'Type of divider.'
+                }
+            ]
+        },
+        airflowControls: {
+            title: 'Airflow Control',
+            itemName: 'Airflow Control',
+            dataKey: 'airflowControls',
+            description: 'Control for airflow windows (forced air).',
+            fields: [
+                { key: 'windowName', label: 'Window Name', type: 'text', tooltip: 'Name of the window.' },
+                {
+                    key: 'source', label: 'Source', type: 'select', options: [
+                        { value: 'Indoor', label: 'Indoor' },
+                        { value: 'Outdoor', label: 'Outdoor' }
+                    ], tooltip: 'Source of the airflow.'
+                },
+                {
+                    key: 'destination', label: 'Destination', type: 'select', options: [
+                        { value: 'Indoor', label: 'Indoor' },
+                        { value: 'Outdoor', label: 'Outdoor' },
+                        { value: 'ReturnAir', label: 'ReturnAir' }
+                    ], tooltip: 'Destination of the airflow.'
+                },
+                { key: 'maxFlowRate', label: 'Max Flow Rate', type: 'number', step: 0.001, tooltip: 'Maximum airflow rate [m3/s].' }
+            ]
+        },
+        stormWindows: {
+            title: 'Storm Windows',
+            itemName: 'Storm Window',
+            dataKey: 'stormWindows',
+            description: 'Movable exterior glass layers.',
+            fields: [
+                { key: 'windowName', label: 'Window Name', type: 'text', tooltip: 'Name of the window.' },
+                { key: 'stormGlassLayerName', label: 'Glass Name', type: 'text', tooltip: 'Material name for the storm glass layer.' },
+                { key: 'distance', label: 'Distance', type: 'number', step: 0.001, tooltip: 'Distance between storm glass and window [m].' },
+                { key: 'onDate', label: 'On Date', type: 'text', tooltip: 'Date storm window is put on (e.g., 1 Nov).' }
+            ]
+        }
+    };
+
+    // --- RENDERERS ---
+
+    function renderCategories() {
+        categoryContainer.innerHTML = '';
+        Object.entries(configs).forEach(([key, config]) => {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--grid-color);';
+            if (key === activeTab) {
+                item.style.backgroundColor = 'var(--accent-color)';
+                item.style.color = 'white';
+            }
+
+            item.innerHTML = `<div class="text-xs">${config.title}</div>`;
+
+            item.addEventListener('click', () => {
+                activeTab = key;
+                renderCategories();
+                renderGenericManager(config);
+            });
+
+            item.addEventListener('mouseenter', () => {
+                if (key !== activeTab) {
+                    item.style.backgroundColor = 'var(--hover-bg)';
+                }
+            });
+
+            item.addEventListener('mouseleave', () => {
+                if (key !== activeTab) {
+                    item.style.backgroundColor = '';
+                }
+            });
+
+            categoryContainer.appendChild(item);
+        });
+    }
 
     function getShadingState() {
         const { config } = window.require
             ? window.require('./energyplusConfigService.js').getConfig(project)
             : (() => {
-                // Fallback if require not available; mimic getConfig minimally
                 const meta =
                     (typeof project.getMetadata === 'function' && project.getMetadata()) ||
                     project.metadata ||
@@ -4717,1712 +3765,222 @@ function createShadingManagerPanel() {
         return {
             siteSurfaces: Array.isArray(shading.siteSurfaces) ? shading.siteSurfaces.slice() : [],
             zoneSurfaces: Array.isArray(shading.zoneSurfaces) ? shading.zoneSurfaces.slice() : [],
+            overhangsFins: Array.isArray(shading.overhangsFins) ? shading.overhangsFins.slice() : [],
             reflectance: Array.isArray(shading.reflectance) ? shading.reflectance.slice() : [],
-            windowShadingControls: Array.isArray(shading.windowShadingControls)
-                ? shading.windowShadingControls.slice()
-                : [],
+            windowShadingControls: Array.isArray(shading.windowShadingControls) ? shading.windowShadingControls.slice() : [],
+            frameDividers: Array.isArray(shading.frameDividers) ? shading.frameDividers.slice() : [],
+            airflowControls: Array.isArray(shading.airflowControls) ? shading.airflowControls.slice() : [],
+            stormWindows: Array.isArray(shading.stormWindows) ? shading.stormWindows.slice() : [],
         };
     }
 
-    function clamp01(v) {
-        if (!Number.isFinite(v)) return undefined;
-        if (v < 0) return 0;
-        if (v > 1) return 1;
-        return v;
-    }
+    function saveShadingState(key, newData) {
+        const currentState = getShadingState();
+        currentState[key] = newData;
 
-    function renderSiteSurfaces() {
-        const { siteSurfaces } = getShadingState();
-        siteSurfacesTbody.innerHTML = '';
-
-        if (!siteSurfaces.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="5">
-                    No site/building shading surfaces defined.
-                </td>
-            `;
-            siteSurfacesTbody.appendChild(tr);
-            return;
-        }
-
-        siteSurfaces.forEach((s, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            const type = s.type === 'Building' ? 'Building' : 'Site';
-            const vertexCount = Array.isArray(s.vertices) ? s.vertices.length : 0;
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="name" value="${s.name || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <select class="w-full" data-field="type">
-                        <option value="Site"${type === 'Site' ? ' selected' : ''}>Site</option>
-                        <option value="Building"${type === 'Building' ? ' selected' : ''}>Building</option>
-                    </select>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="sched" value="${s.transmittanceScheduleName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-[--text-secondary]">
-                    ${vertexCount || 0} (edit in JSON)
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-site-surface">Delete</button>
-                </td>
-            `;
-            siteSurfacesTbody.appendChild(tr);
-        });
-
-        siteSurfacesTbody.querySelectorAll('button[data-action="delete-site-surface"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addSiteSurfaceRow() {
-        if (siteSurfacesTbody.children.length === 1) {
-            const only = siteSurfacesTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                siteSurfacesTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full" data-field="type">
-                    <option value="Site">Site</option>
-                    <option value="Building">Building</option>
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="sched" placeholder="Transmittance schedule">
-            </td>
-            <td class="px-1 py-1 align-top text-[--text-secondary]">
-                0 (edit vertices in JSON)
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-site-surface">Delete</button>
-            </td>
-        `;
-        siteSurfacesTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-site-surface"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function renderZoneSurfaces() {
-        const { zoneSurfaces } = getShadingState();
-        zoneSurfacesTbody.innerHTML = '';
-
-        if (!zoneSurfaces.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="5">
-                    No zone shading surfaces defined.
-                </td>
-            `;
-            zoneSurfacesTbody.appendChild(tr);
-            return;
-        }
-
-        zoneSurfaces.forEach((s, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            const vertexCount = Array.isArray(s.vertices) ? s.vertices.length : 0;
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="name" value="${s.name || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="base" value="${s.baseSurfaceName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="sched" value="${s.transmittanceScheduleName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-[--text-secondary]">
-                    ${vertexCount || 0} (edit in JSON)
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-zone-surface">Delete</button>
-                </td>
-            `;
-            zoneSurfacesTbody.appendChild(tr);
-        });
-
-        zoneSurfacesTbody.querySelectorAll('button[data-action="delete-zone-surface"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addZoneSurfaceRow() {
-        if (zoneSurfacesTbody.children.length === 1) {
-            const only = zoneSurfacesTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                zoneSurfacesTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="base" placeholder="Base Surface Name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="sched" placeholder="Transmittance schedule">
-            </td>
-            <td class="px-1 py-1 align-top text-[--text-secondary]">
-                0 (edit vertices in JSON)
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-zone-surface">Delete</button>
-            </td>
-        `;
-        zoneSurfacesTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-zone-surface"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function renderReflectance() {
-        const { reflectance } = getShadingState();
-        reflectanceTbody.innerHTML = '';
-
-        if (!reflectance.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="6">
-                    No ShadingProperty:Reflectance entries defined.
-                </td>
-            `;
-            reflectanceTbody.appendChild(tr);
-            return;
-        }
-
-        reflectance.forEach((r, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="name" value="${r.shadingSurfaceName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="solar" value="${r.solarReflectance ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="vis" value="${r.visibleReflectance ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="irem" value="${r.infraredHemisphericalEmissivity ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="irtr" value="${r.infraredTransmittance ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-reflectance">Delete</button>
-                </td>
-            `;
-            reflectanceTbody.appendChild(tr);
-        });
-
-        reflectanceTbody.querySelectorAll('button[data-action="delete-reflectance"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addReflectanceRow() {
-        if (reflectanceTbody.children.length === 1) {
-            const only = reflectanceTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                reflectanceTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Shading surface name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="solar">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="vis">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="irem">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" min="0" max="1" class="w-full" data-field="irtr">
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-reflectance">Delete</button>
-            </td>
-        `;
-        reflectanceTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-reflectance"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function renderWindowControls() {
-        const { windowShadingControls } = getShadingState();
-        windowControlsTbody.innerHTML = '';
-
-        if (!windowShadingControls.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="10">
-                    No WindowShadingControl entries defined.
-                </td>
-            `;
-            windowControlsTbody.appendChild(tr);
-            return;
-        }
-
-        windowShadingControls.forEach((c, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="name" value="${c.name || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="shadingType" value="${c.shadingType || ''}" placeholder="InteriorShade, ExteriorScreen, etc.">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="controlType" value="${c.controlType || ''}" placeholder="OnIfHighSolar, Schedule, etc.">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="scheduleName" value="${c.scheduleName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="setpoint1" value="${c.setpoint1 ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="setpoint2" value="${c.setpoint2 ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-center">
-                    <input type="checkbox" data-field="glareActive" ${c.glareControlIsActive ? 'checked' : ''}>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="multiType" value="${c.multipleSurfaceControlType || ''}" placeholder="Sequential/Group">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="fenestration" value="${Array.isArray(c.fenestrationSurfaceNames) ? c.fenestrationSurfaceNames.join(', ') : ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-window-control">Delete</button>
-                </td>
-            `;
-            windowControlsTbody.appendChild(tr);
-        });
-
-        windowControlsTbody
-            .querySelectorAll('button[data-action="delete-window-control"]')
-            .forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const row = btn.closest('tr');
-                    if (row) row.remove();
-                });
-            });
-    }
-
-    function addWindowControlRow() {
-        if (windowControlsTbody.children.length === 1) {
-            const only = windowControlsTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                windowControlsTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Control name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="shadingType" placeholder="InteriorShade, ExteriorBlind, etc.">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="controlType" placeholder="OnIfHighSolar, Schedule, etc.">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="scheduleName" placeholder="Schedule name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="setpoint1" placeholder="Setpoint 1">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="setpoint2" placeholder="Setpoint 2">
-            </td>
-            <td class="px-1 py-1 align-top text-center">
-                <input type="checkbox" data-field="glareActive">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="multiType" placeholder="Sequential/Group">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="fenestration" placeholder="Win1, Win2, ...">
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-window-control">Delete</button>
-            </td>
-        `;
-        windowControlsTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-window-control"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function collectAndSaveShading() {
-        const { meta, ep } =
-            (typeof project.getMetadata === 'function' || project.metadata)
-                ? (() => {
-                    const meta =
-                        (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-                        project.metadata ||
-                        {};
-                    const ep = meta.energyPlusConfig || meta.energyplus || {};
-                    return { meta, ep };
-                })()
-                : { meta: {}, ep: {} };
-
-        // Site surfaces
-        const siteSurfaces = [];
-        siteSurfacesTbody.querySelectorAll('tr').forEach((tr) => {
-            if (tr.querySelector('td[colspan]')) return;
-            const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            if (!name) return;
-            const type = (tr.querySelector('[data-field="type"]')?.value || 'Site').trim();
-            const sched = (tr.querySelector('[data-field="sched"]')?.value || '').trim();
-            const entry = { name, type: type === 'Building' ? 'Building' : 'Site' };
-            if (sched) entry.transmittanceScheduleName = sched;
-            siteSurfaces.push(entry);
-        });
-
-        // Zone surfaces
-        const zoneSurfaces = [];
-        zoneSurfacesTbody.querySelectorAll('tr').forEach((tr) => {
-            if (tr.querySelector('td[colspan]')) return;
-            const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            const base = (tr.querySelector('[data-field="base"]')?.value || '').trim();
-            if (!name || !base) return;
-            const sched = (tr.querySelector('[data-field="sched"]')?.value || '').trim();
-            const entry = { name, baseSurfaceName: base };
-            if (sched) entry.transmittanceScheduleName = sched;
-            zoneSurfaces.push(entry);
-        });
-
-        // Reflectance
-        const reflectance = [];
-        reflectanceTbody.querySelectorAll('tr').forEach((tr) => {
-            if (tr.querySelector('td[colspan]')) return;
-            const sName = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            if (!sName) return;
-            const num = (sel) => {
-                const el = tr.querySelector(sel);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? clamp01(v) : undefined;
-            };
-            const item = {
-                shadingSurfaceName: sName,
-            };
-            const s = num('[data-field="solar"]');
-            const v = num('[data-field="vis"]');
-            const ie = num('[data-field="irem"]');
-            const it = num('[data-field="irtr"]');
-            if (s != null) item.solarReflectance = s;
-            if (v != null) item.visibleReflectance = v;
-            if (ie != null) item.infraredHemisphericalEmissivity = ie;
-            if (it != null) item.infraredTransmittance = it;
-            reflectance.push(item);
-        });
-
-        // WindowShadingControls
-        const windowShadingControls = [];
-        windowControlsTbody.querySelectorAll('tr').forEach((tr) => {
-            if (tr.querySelector('td[colspan]')) return;
-            const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            const shadingType = (tr.querySelector('[data-field="shadingType"]')?.value || '').trim();
-            const controlType = (tr.querySelector('[data-field="controlType"]')?.value || '').trim();
-            if (!name || !shadingType || !controlType) return;
-
-            const scheduleName = (tr.querySelector('[data-field="scheduleName"]')?.value || '').trim() || undefined;
-            const num = (sel) => {
-                const el = tr.querySelector(sel);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? v : undefined;
-            };
-            const setpoint1 = num('[data-field="setpoint1"]');
-            const setpoint2 = num('[data-field="setpoint2"]');
-            const glareActive = tr.querySelector('[data-field="glareActive"]')?.checked || false;
-            const multiType = (tr.querySelector('[data-field="multiType"]')?.value || '').trim() || undefined;
-            const fenStr = (tr.querySelector('[data-field="fenestration"]')?.value || '').trim();
-            const fenestrationSurfaceNames = fenStr
-                ? fenStr.split(',').map((s) => s.trim()).filter(Boolean)
-                : [];
-
-            const ctrl = {
-                name,
-                shadingType,
-                controlType,
-                fenestrationSurfaceNames,
-            };
-            if (scheduleName) ctrl.scheduleName = scheduleName;
-            if (setpoint1 != null) ctrl.setpoint1 = setpoint1;
-            if (setpoint2 != null) ctrl.setpoint2 = setpoint2;
-            if (glareActive) ctrl.glareControlIsActive = true;
-            if (multiType) ctrl.multipleSurfaceControlType = multiType;
-
-            if (fenestrationSurfaceNames.length) {
-                windowShadingControls.push(ctrl);
-            }
-        });
-
-        const shading = {};
-        if (siteSurfaces.length) shading.siteSurfaces = siteSurfaces;
-        if (zoneSurfaces.length) shading.zoneSurfaces = zoneSurfaces;
-        if (reflectance.length) shading.reflectance = reflectance;
-        if (windowShadingControls.length) shading.windowShadingControls = windowShadingControls;
-
-        const nextEP = { ...ep };
-        if (Object.keys(shading).length) {
-            nextEP.shading = shading;
+        if (typeof window.require !== 'undefined') {
+            const { setShading } = window.require('./energyplusConfigService.js');
+            setShading(project, currentState);
         } else {
-            delete nextEP.shading;
-        }
-
-        if (typeof project.updateMetadata === 'function') {
-            project.updateMetadata({
-                ...meta,
-                energyPlusConfig: nextEP,
-            });
-        } else {
-            project.metadata = {
-                ...(project.metadata || meta),
-                energyPlusConfig: nextEP,
-            };
+            console.warn('Cannot save shading: energyplusConfigService not found.');
         }
     }
 
-    if (addSiteSurfaceBtn) {
-        addSiteSurfaceBtn.addEventListener('click', () => addSiteSurfaceRow());
-    }
-    if (addZoneSurfaceBtn) {
-        addZoneSurfaceBtn.addEventListener('click', () => addZoneSurfaceRow());
-    }
-    if (addReflectanceBtn) {
-        addReflectanceBtn.addEventListener('click', () => addReflectanceRow());
-    }
-    if (addWinCtrlBtn) {
-        addWinCtrlBtn.addEventListener('click', () => addWindowControlRow());
-    }
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                collectAndSaveShading();
-                alert('Shading & Solar Control configuration saved.');
-            } catch (err) {
-                console.error('ShadingManager: save failed', err);
-                alert('Failed to save Shading & Solar Control configuration. Check console for details.');
-            }
-        });
-    }
+    function renderGenericManager(config) {
+        const state = getShadingState();
+        const data = state[config.dataKey] || [];
 
-    renderSiteSurfaces();
-    renderZoneSurfaces();
-    renderReflectance();
-    renderWindowControls();
-
-    return panel;
-
-    function addWindowControlRow() {
-        if (windowControlsTbody.children.length === 1) {
-            const only = windowControlsTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                windowControlsTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Control name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="windowGroup" placeholder="Window group/tag">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full" data-field="controlType">
-                    <option value="">(select)</option>
-                    <option value="AlwaysOn">AlwaysOn</option>
-                    <option value="OnIfHighSolar">OnIfHighSolar</option>
-                    <option value="OnIfHighGlare">OnIfHighGlare</option>
-                    <option value="OnIfHighT">OnIfHighT</option>
-                    <option value="OnIfHighSolarOrT">OnIfHighSolarOrT</option>
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full mb-0.5" data-field="device" placeholder="Shading device">
-                <input class="w-full" data-field="schedule" placeholder="Schedule">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <div class="grid grid-cols-3 gap-0.5">
-                    <input type="number" step="1" class="w-full" data-field="setSolar" placeholder="W/m²">
-                    <input type="number" step="1" class="w-full" data-field="setLux" placeholder="lux">
-                    <input type="number" step="0.1" class="w-full" data-field="setTemp" placeholder="°C">
-                </div>
-            </td>
-            <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.05" min="0" max="1" class="w-full"
-                    data-field="glareFrac" placeholder="0-1">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full" data-field="typeHint">
-                    <option value="">(auto)</option>
-                    <option value="Blind">Blind</option>
-                    <option value="Shade">Shade</option>
-                    <option value="Screen">Screen</option>
-                    <option value="SwitchableGlazing">SwitchableGlazing</option>
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-window-control">Delete</button>
-            </td>
-        `;
-        windowControlsTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-window-control"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function renderOverhangs() {
-        const { overhangs } = getShadingState();
-        overhangsTbody.innerHTML = '';
-
-        if (!overhangs.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="7">
-                    No overhangs defined.
-                </td>
-            `;
-            overhangsTbody.appendChild(tr);
-            return;
-        }
-
-        overhangs.forEach((o, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="name" value="${o.name || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full" data-field="windowGroup" value="${o.windowGroup || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="depth" value="${o.depth ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="vOffset" value="${o.verticalOffset ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="leftExt" value="${o.leftExt ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.01" class="w-full" data-field="rightExt" value="${o.rightExt ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-overhang">Delete</button>
-                </td>
-            `;
-            overhangsTbody.appendChild(tr);
-        });
-
-        overhangsTbody
-            .querySelectorAll('button[data-action="delete-overhang"]')
-            .forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const row = btn.closest('tr');
-                    if (row) row.remove();
-                });
-            });
-    }
-
-    function addOverhangRow() {
-        if (overhangsTbody.children.length === 1) {
-            const only = overhangsTbody.children[0];
-            if (only && only.querySelector('td[colspan]')) {
-                overhangsTbody.innerHTML = '';
-            }
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="name" placeholder="Overhang name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full" data-field="windowGroup" placeholder="Window group/tag">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="depth" placeholder="Depth">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="vOffset" placeholder="Offset">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="leftExt" placeholder="Left">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input type="number" step="0.01" class="w-full" data-field="rightExt" placeholder="Right">
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-overhang">Delete</button>
-            </td>
-        `;
-        overhangsTbody.appendChild(tr);
-        tr.querySelector('button[data-action="delete-overhang"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function collectAndSaveShading() {
-        const { meta, ep } = getShadingState();
-
-        // Collect surfaces
-        const surfaces = [];
-        surfacesTbody.querySelectorAll('tr').forEach((tr) => {
-            const hasPlaceholder = tr.querySelector('td[colspan]');
-            if (hasPlaceholder) return;
-
-            const targetName = (tr.querySelector('[data-field="targetName"]')?.value || '').trim();
-            if (!targetName) return;
-
-            const targetType =
-                tr.querySelector('[data-field="targetType"]')?.value || 'Surface';
-
-            const num = (field) => {
-                const el = tr.querySelector(`[data-field="${field}"]`);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? v : undefined;
-            };
-
-            const sw = clamp01(num('swRefl'));
-            const vis = clamp01(num('visRefl'));
-            const lw = clamp01(num('lwEmiss'));
-
-            if (sw == null && vis == null && lw == null) {
-                return;
-            }
-
-            const entry = {
-                targetType,
-                targetName,
-            };
-            if (sw != null) entry.shortWaveReflectance = sw;
-            if (vis != null) entry.visibleReflectance = vis;
-            if (lw != null) entry.longWaveEmissivity = lw;
-            surfaces.push(entry);
-        });
-
-        // Collect window controls
-        const windowControls = [];
-        windowControlsTbody.querySelectorAll('tr').forEach((tr) => {
-            const hasPlaceholder = tr.querySelector('td[colspan]');
-            if (hasPlaceholder) return;
-
-            const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            const windowGroup =
-                (tr.querySelector('[data-field="windowGroup"]')?.value || '').trim();
-            const controlType =
-                (tr.querySelector('[data-field="controlType"]')?.value || '').trim();
-
-            if (!name || !windowGroup || !controlType) {
-                return;
-            }
-
-            const device =
-                (tr.querySelector('[data-field="device"]')?.value || '').trim() || undefined;
-            const schedule =
-                (tr.querySelector('[data-field="schedule"]')?.value || '').trim() ||
-                undefined;
-
-            const num = (field) => {
-                const el = tr.querySelector(`[data-field="${field}"]`);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? v : undefined;
-            };
-
-            const solar = num('setSolar');
-            const lux = num('setLux');
-            const temp = num('setTemp');
-            let glare = num('glareFrac');
-            if (glare != null) glare = clamp01(glare);
-
-            const typeHint =
-                (tr.querySelector('[data-field="typeHint"]')?.value || '').trim() || undefined;
-
-            const entry = {
-                name,
-                windowGroup,
-                controlType,
-            };
-            if (device) entry.shadingDeviceName = device;
-            if (schedule) entry.scheduleName = schedule;
-            if (solar != null) entry.setpointSolar = solar;
-            if (lux != null) entry.setpointIlluminance = lux;
-            if (temp != null) entry.setpointTemp = temp;
-            if (glare != null) entry.glareProtectionFraction = glare;
-            if (typeHint) entry.typeHint = typeHint;
-
-            windowControls.push(entry);
-        });
-
-        // Collect overhangs
-        const overhangs = [];
-        overhangsTbody.querySelectorAll('tr').forEach((tr) => {
-            const hasPlaceholder = tr.querySelector('td[colspan]');
-            if (hasPlaceholder) return;
-
-            const name = (tr.querySelector('[data-field="name"]')?.value || '').trim();
-            const windowGroup =
-                (tr.querySelector('[data-field="windowGroup"]')?.value || '').trim();
-
-            const num = (field) => {
-                const el = tr.querySelector(`[data-field="${field}"]`);
-                if (!el) return NaN;
-                const v = parseFloat(el.value);
-                return v;
-            };
-
-            const depth = num('depth');
-            const vOffset = num('vOffset');
-            const leftExt = num('leftExt');
-            const rightExt = num('rightExt');
-
-            if (!name || !windowGroup || !Number.isFinite(depth) || !Number.isFinite(vOffset)) {
-                return;
-            }
-
-            const entry = {
-                name,
-                windowGroup,
-                depth,
-                verticalOffset: vOffset,
-            };
-            if (Number.isFinite(leftExt)) entry.leftExt = leftExt;
-            if (Number.isFinite(rightExt)) entry.rightExt = rightExt;
-
-            overhangs.push(entry);
-        });
-
-        const shading = {};
-        if (surfaces.length) shading.surfaces = surfaces;
-        if (windowControls.length) shading.windowControls = windowControls;
-        if (overhangs.length) shading.overhangs = overhangs;
-
-        const nextEP = {
-            ...ep,
-        };
-        if (Object.keys(shading).length) {
-            nextEP.shading = shading;
-        } else {
-            // Leave shading undefined/removed if all sections empty
-            if (nextEP.shading) {
-                delete nextEP.shading;
-            }
-        }
-
-        if (typeof project.updateMetadata === 'function') {
-            project.updateMetadata({
-                ...meta,
-                energyPlusConfig: nextEP,
-            });
-        } else {
-            project.metadata = {
-                ...(project.metadata || meta),
-                energyPlusConfig: nextEP,
-            };
-        }
-    }
-
-    if (addSurfaceBtn) {
-        addSurfaceBtn.addEventListener('click', () => {
-            addSurfaceRow();
-        });
-    }
-    if (addWinCtrlBtn) {
-        addWinCtrlBtn.addEventListener('click', () => {
-            addWindowControlRow();
-        });
-    }
-    if (addOverhangBtn) {
-        addOverhangBtn.addEventListener('click', () => {
-            addOverhangRow();
-        });
-    }
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                collectAndSaveShading();
-                alert('Shading & Solar Control configuration saved.');
-            } catch (err) {
-                console.error('ShadingManager: save failed', err);
-                alert('Failed to save Shading & Solar Control configuration. Check console for details.');
-            }
-        });
-    }
-
-    // Initial render from existing config (if any)
-    renderSurfaces();
-    renderWindowControls();
-    renderOverhangs();
-
-    return panel;
-}
-
-function createDaylightingManagerPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'panel-energyplus-daylighting';
-    panel.className = 'floating-window ui-panel resizable-panel';
-
-    panel.innerHTML = `
-        <div class="window-header">
-            <span>Daylighting & Lighting Outputs</span>
-            <!-- Help button removed -->
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
+        contentContainer.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-semibold text-sm uppercase">${config.title}</h3>
+                <button class="btn btn-xs btn-primary" id="add-item-btn">Add ${config.itemName}</button>
             </div>
-        </div>
-        <div class="window-content space-y-3">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure per-zone <code>Daylighting:Controls</code>, <code>Output:IlluminanceMap</code>,
-                and selected <code>Output:Variable</code> entries.
-                Settings are stored in <code>energyPlusConfig.daylighting</code> and consumed by the EnergyPlus model builder.
-                If left empty, Ray-Modeler emits no additional daylighting controls/maps beyond defaults.
-            </p>
-
-            <!-- Per-zone Daylighting:Controls -->
-            <div class="space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">Daylighting Controls (per zone)</span>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-60 overflow-y-auto **scrollable-panel-inner**">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Zone</th>
-                                <th class="px-1 py-1 text-left">Enabled</th>
-                                <th class="px-1 py-1 text-left">Ref Pt 1 (x,y,z)</th>
-                                <th class="px-1 py-1 text-left">Ref Pt 2 (x,y,z)</th>
-                                <th class="px-1 py-1 text-left">Setpoint [lux]</th>
-                                <th class="px-1 py-1 text-left">Type</th>
-                                <th class="px-1 py-1 text-left">Fraction</th>
+            <p class="text-xs text-[--text-secondary] mb-4">${config.description}</p>
+            <div class="overflow-x-auto border border-gray-700 rounded bg-black/20">
+                <table class="w-full text-xs text-left">
+                    <thead class="bg-black/40 text-[--text-secondary]">
+                        <tr>
+                            <th class="p-2 font-medium">Name</th>
+                            <th class="p-2 font-medium">Details</th>
+                            <th class="p-2 w-20 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700/50">
+                        ${data.map((item, index) => `
+                            <tr class="hover:bg-white/5 transition-colors">
+                                <td class="p-2 font-medium">${item.name || item.windowName || item.shadingSurfaceName || '-'}</td>
+                                <td class="p-2 text-[--text-secondary]">${formatDetails(item, config)}</td>
+                                <td class="p-2 text-right">
+                                    <button class="btn btn-xxs btn-secondary edit-btn mr-1" data-index="${index}">Edit</button>
+                                    <button class="btn btn-xxs btn-danger delete-btn" data-index="${index}">&times;</button>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody class="daylighting-controls-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Illuminance Maps -->
-            <div class="space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">Illuminance Maps</span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-illum-map">+ Add Map</button>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-40 overflow-y-auto **scrollable-panel-inner**">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Name</th>
-                                <th class="px-1 py-1 text-left">Zone</th>
-                                <th class="px-1 py-1 text-left">Origin (x,y,z)</th>
-                                <th class="px-1 py-1 text-left">Grid (Nx, Dx, Ny, Dy)</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="illum-maps-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Output:Variable (lighting/daylighting focused) -->
-            <div class="space-y-1">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-xs uppercase text-[--text-secondary]">Lighting & Daylighting Output Variables</span>
-                    <button class="btn btn-xxs btn-secondary" data-action="add-output-var">+ Add Variable</button>
-                </div>
-                <div class="border border-gray-700/70 rounded bg-black/40 max-h-40 overflow-y-auto scrollable-panel-inner">
-                    <table class="w-full text-xs">
-                        <thead class="bg-black/40">
-                            <tr>
-                                <th class="px-1 py-1 text-left">Key</th>
-                                <th class="px-1 py-1 text-left">Variable Name</th>
-                                <th class="px-1 py-1 text-left">Frequency</th>
-                                <th class="px-1 py-1 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="daylighting-output-vars-tbody"></tbody>
-                    </table>
-                </div>
-                <p class="text-xs text-[--text-secondary]">
-                    Examples: Key = zone name or "Environment"; Variable = "Zone Lights Electric Power";
-                    Frequency = Hourly / Timestep / RunPeriod, etc.
-                    These entries are stored in <code>energyPlusConfig.daylighting.outputs.variables</code>.
-                </p>
-            </div>
-
-            <div class="flex justify-end gap-2">
-                <button class="btn btn-xxs btn-secondary" data-action="save-daylighting">Save Daylighting & Outputs</button>
-            </div>
-        </div>
-    `;
-
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
-    } else {
-        const closeBtn = panel.querySelector('.window-icon-close');
-        if (closeBtn) {
-            closeBtn.onclick = () => panel.classList.add('hidden');
-        }
-    }
-
-    const controlsTbody = panel.querySelector('.daylighting-controls-tbody');
-    const illumTbody = panel.querySelector('.illum-maps-tbody');
-    const outputVarsTbody = panel.querySelector('.daylighting-output-vars-tbody');
-    const addIllumBtn = panel.querySelector('[data-action="add-illum-map"]');
-    const addOutputVarBtn = panel.querySelector('[data-action="add-output-var"]');
-    const saveBtn = panel.querySelector('[data-action="save-daylighting"]');
-
-    const headerHelp = panel.querySelector('[data-action="open-help-daylighting"]');
-    if (headerHelp) {
-        headerHelp.addEventListener('click', (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            console.debug('[EnergyPlus] Daylighting help disabled');
-        });
-    }
-
-    function getMetaEPDaylighting() {
-        const meta =
-            (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-            project.metadata ||
-            {};
-        const ep = meta.energyPlusConfig || meta.energyplus || {};
-        const daylighting = ep.daylighting || {};
-        return { meta, ep, daylighting };
-    }
-
-    function getZones() {
-        let zones = [];
-        if (typeof project.getZones === 'function') {
-            zones = project.getZones() || [];
-        } else if (Array.isArray(project.zones)) {
-            zones = project.zones;
-        }
-        if (!Array.isArray(zones) || !zones.length) {
-            return [{ name: 'Zone_1' }];
-        }
-        return zones.map((z, i) => ({
-            name: z.name || `Zone_${i + 1}`,
-        }));
-    }
-
-    function renderControls() {
-        const { daylighting } = getMetaEPDaylighting();
-        const zones = getZones();
-        const existing = new Map();
-
-        if (Array.isArray(daylighting.controls)) {
-            daylighting.controls.forEach((c) => {
-                if (c && c.zoneName) {
-                    existing.set(String(c.zoneName), c);
-                }
-            });
-        }
-
-        controlsTbody.innerHTML = '';
-
-        zones.forEach((z) => {
-            const zn = String(z.name);
-            const c = existing.get(zn) || {};
-            const enabled = c.enabled !== false && c.refPoints && c.refPoints.length > 0 && typeof c.setpoint === 'number';
-
-            const rp1 = (c.refPoints && c.refPoints[0]) || {};
-            const rp2 = (c.refPoints && c.refPoints[1]) || {};
-
-            const tr = document.createElement('tr');
-            tr.dataset.zoneName = zn;
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top text-[--accent-color]">${zn}</td>
-                <td class="px-1 py-1 align-top">
-                    <input type="checkbox" data-field="enabled" ${enabled ? 'checked' : ''}>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <div class="grid grid-cols-3 gap-0.5">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="x" data-field="rp1x" value="${rp1.x ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="y" data-field="rp1y" value="${rp1.y ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="z" data-field="rp1z" value="${rp1.z ?? ''}">
-                    </div>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <div class="grid grid-cols-3 gap-0.5">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="x" data-field="rp2x" value="${rp2.x ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="y" data-field="rp2y" value="${rp2.y ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="z" data-field="rp2z" value="${rp2.z ?? ''}">
-                    </div>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="1" class="w-full text-xs" data-field="setpoint" value="${c.setpoint ?? ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <select class="w-full text-xs" data-field="type">
-                        <option value="Continuous"${c.type === 'Continuous' || !c.type ? ' selected' : ''}>Continuous</option>
-                        <option value="Stepped"${c.type === 'Stepped' ? ' selected' : ''}>Stepped</option>
-                        <option value="ContinuousOff"${c.type === 'ContinuousOff' ? ' selected' : ''}>ContinuousOff</option>
-                    </select>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input type="number" step="0.05" min="0" max="1" class="w-full text-xs" data-field="fraction" value="${c.fraction ?? ''}">
-                </td>
-            `;
-            controlsTbody.appendChild(tr);
-        });
-    }
-
-    function renderIlluminanceMaps() {
-        const { daylighting } = getMetaEPDaylighting();
-        const zones = getZones().map((z) => z.name);
-        const maps = (daylighting.outputs && Array.isArray(daylighting.outputs.illuminanceMaps))
-            ? daylighting.outputs.illuminanceMaps
-            : [];
-
-        illumTbody.innerHTML = '';
-
-        if (!maps.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="5">
-                    No illuminance maps defined.
-                </td>
-            `;
-            illumTbody.appendChild(tr);
-            return;
-        }
-
-        maps.forEach((m, index) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(index);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full text-xs" data-field="name" value="${m.name || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <select class="w-full text-xs" data-field="zoneName">
-                        ${zones
-                    .map((zn) => `<option value="${zn}"${zn === m.zoneName ? ' selected' : ''}>${zn}</option>`)
-                    .join('')}
-                    </select>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <div class="grid grid-cols-3 gap-0.5">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="x" data-field="xOrigin" value="${m.xOrigin ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="y" data-field="yOrigin" value="${m.yOrigin ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="z" data-field="zHeight" value="${m.zHeight ?? ''}">
-                    </div>
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <div class="grid grid-cols-4 gap-0.5">
-                        <input type="number" step="1" class="w-full text-xs" placeholder="Nx" data-field="xNumPoints" value="${m.xNumPoints ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="Dx" data-field="xSpacing" value="${m.xSpacing ?? ''}">
-                        <input type="number" step="1" class="w-full text-xs" placeholder="Ny" data-field="yNumPoints" value="${m.yNumPoints ?? ''}">
-                        <input type="number" step="0.01" class="w-full text-xs" placeholder="Dy" data-field="ySpacing" value="${m.ySpacing ?? ''}">
-                    </div>
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-map">Delete</button>
-                </td>
-            `;
-            illumTbody.appendChild(tr);
-        });
-
-        illumTbody.querySelectorAll('button[data-action="delete-map"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addIlluminanceMapRow() {
-        const zones = getZones().map((z) => z.name);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full text-xs" data-field="name" placeholder="Map name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full text-xs" data-field="zoneName">
-                    ${zones.map((zn) => `<option value="${zn}">${zn}</option>`).join('')}
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top">
-                <div class="grid grid-cols-3 gap-0.5">
-                    <input type="number" step="0.01" class="w-full text-xs" placeholder="x" data-field="xOrigin">
-                    <input type="number" step="0.01" class="w-full text-xs" placeholder="y" data-field="yOrigin">
-                    <input type="number" step="0.01" class="w-full text-xs" placeholder="z" data-field="zHeight">
-                </div>
-            </td>
-            <td class="px-1 py-1 align-top">
-                <div class="grid grid-cols-4 gap-0.5">
-                    <input type="number" step="1" class="w-full text-xs" placeholder="Nx" data-field="xNumPoints">
-                    <input type="number" step="0.01" class="w-full text-xs" placeholder="Dx" data-field="xSpacing">
-                    <input type="number" step="1" class="w-full text-xs" placeholder="Ny" data-field="yNumPoints">
-                    <input type="number" step="0.01" class="w-full text-xs" placeholder="Dy" data-field="ySpacing">
-                </div>
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-map">Delete</button>
-            </td>
-        `;
-        illumTbody.appendChild(tr);
-        const delBtn = tr.querySelector('button[data-action="delete-map"]');
-        if (delBtn) {
-            delBtn.addEventListener('click', () => tr.remove());
-        }
-    }
-
-    function renderOutputVariables() {
-        const { daylighting } = getMetaEPDaylighting();
-        const outputs = daylighting.outputs || {};
-        const vars = Array.isArray(outputs.variables) ? outputs.variables : [];
-        outputVarsTbody.innerHTML = '';
-
-        if (!vars.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="4">
-                    No Output:Variable entries defined for daylighting/lighting.
-                </td>
-            `;
-            outputVarsTbody.appendChild(tr);
-            return;
-        }
-
-        vars.forEach((v, idx) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full text-xs" data-field="key" value="${v.key || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full text-xs" data-field="variableName" value="${v.variableName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <select class="w-full text-xs" data-field="freq">
-                        ${['Timestep', 'Hourly', 'Daily', 'Monthly', 'RunPeriod'].map((f) => `
-                            <option value="${f}"${(v.reportingFrequency || 'Hourly') === f ? ' selected' : ''}>${f}</option>
                         `).join('')}
-                    </select>
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-var">Delete</button>
-                </td>
-            `;
-            outputVarsTbody.appendChild(tr);
-        });
-
-        outputVarsTbody.querySelectorAll('button[data-action="delete-var"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addOutputVarRow() {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full text-xs" data-field="key" placeholder="Key (zone name, Environment, *)">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full text-xs" data-field="variableName" placeholder="Variable Name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full text-xs" data-field="freq">
-                    <option value="Hourly" selected>Hourly</option>
-                    <option value="Timestep">Timestep</option>
-                    <option value="Daily">Daily</option>
-                    <option value="Monthly">Monthly</option>
-                    <option value="RunPeriod">RunPeriod</option>
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-var">Delete</button>
-            </td>
+                        ${data.length === 0 ? '<tr><td colspan="3" class="p-4 text-center text-[--text-secondary] italic">No items defined.</td></tr>' : ''}
+                    </tbody>
+                </table>
+            </div>
         `;
-        outputVarsTbody.appendChild(tr);
-        tr.querySelector('[data-action="delete-var"]').addEventListener('click', () => {
-            tr.remove();
+
+        // Add Listeners
+        contentContainer.querySelector('#add-item-btn').addEventListener('click', () => {
+            editItem(null, config);
+        });
+
+        contentContainer.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                editItem(idx, config);
+            });
+        });
+
+        contentContainer.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.dataset.index);
+                if (confirm('Are you sure you want to delete this item?')) {
+                    const newData = [...data];
+                    newData.splice(idx, 1);
+                    saveShadingState(config.dataKey, newData);
+                    renderGenericManager(config);
+                }
+            });
         });
     }
 
-    function collectDaylightingFromUI() {
-        const { meta, ep } = getMetaEPDaylighting();
-        const zones = getZones().map((z) => z.name);
-        const zoneSet = new Set(zones);
+    function formatDetails(item, config) {
+        // Helper to show a summary string based on the item type
+        if (config.dataKey === 'siteSurfaces') return `${item.type || '-'}, ${item.transmittanceScheduleName || 'Opaque'}`;
+        if (config.dataKey === 'zoneSurfaces') return `Base: ${item.baseSurfaceName || '-'}`;
+        if (config.dataKey === 'overhangsFins') return `${item.type || '-'} on ${item.windowOrDoorName || '-'}`;
+        if (config.dataKey === 'reflectance') return `Solar: ${item.solarReflectance ?? '-'}, Vis: ${item.visibleReflectance ?? '-'}`;
+        if (config.dataKey === 'windowShadingControls') return `${item.shadingType || '-'}, ${item.controlType || '-'}`;
+        if (config.dataKey === 'frameDividers') return `Width: ${item.frameWidth ?? '-'}, ${item.dividerType || '-'}`;
+        if (config.dataKey === 'airflowControls') return `${item.source || '-'} -> ${item.destination || '-'}`;
+        if (config.dataKey === 'stormWindows') return `Glass: ${item.stormGlassLayerName || '-'}, Dist: ${item.distance ?? '-'}`;
+        return '';
+    }
 
-        // Controls
-        const controls = [];
-        controlsTbody.querySelectorAll('tr[data-zone-name]').forEach((tr) => {
-            const zn = tr.dataset.zoneName;
-            if (!zn || !zoneSet.has(zn)) return;
+    function editItem(index, config) {
+        const state = getShadingState();
+        const data = state[config.dataKey] || [];
+        const item = index !== null ? data[index] : {};
+        const isNew = index === null;
 
-            const enabled = tr.querySelector('[data-field="enabled"]')?.checked;
-            const num = (field) => {
-                const el = tr.querySelector(`[data-field="${field}"]`);
-                if (!el) return undefined;
-                const v = parseFloat(el.value);
-                return Number.isFinite(v) ? v : undefined;
-            };
-
-            const setpoint = num('setpoint');
-            const rp1 = {
-                x: num('rp1x'),
-                y: num('rp1y'),
-                z: num('rp1z'),
-            };
-            const rp2 = {
-                x: num('rp2x'),
-                y: num('rp2y'),
-                z: num('rp2z'),
-            };
-            const type = tr.querySelector('[data-field="type"]')?.value || 'Continuous';
-            const fractionEl = tr.querySelector('[data-field="fraction"]');
-            const fractionVal = fractionEl ? parseFloat(fractionEl.value) : NaN;
-            const fraction =
-                Number.isFinite(fractionVal) && fractionVal > 0
-                    ? Math.max(0, Math.min(1, fractionVal))
-                    : undefined;
-
-            const hasRP1 = Number.isFinite(rp1.x) && Number.isFinite(rp1.y) && Number.isFinite(rp1.z);
-            const hasRP2 = Number.isFinite(rp2.x) && Number.isFinite(rp2.y) && Number.isFinite(rp2.z);
-
-            if (enabled && hasRP1 && Number.isFinite(setpoint)) {
-                const refPoints = [];
-                refPoints.push({ x: rp1.x, y: rp1.y, z: rp1.z });
-                if (hasRP2) {
-                    refPoints.push({ x: rp2.x, y: rp2.y, z: rp2.z });
-                }
-                const ctrl = {
-                    zoneName: zn,
-                    enabled: true,
-                    refPoints,
-                    setpoint,
-                    type: type === 'Stepped' || type === 'ContinuousOff' ? type : 'Continuous',
-                };
-                if (fraction !== undefined) {
-                    ctrl.fraction = fraction;
-                }
-                controls.push(ctrl);
-            }
-        });
-
-        // Illuminance maps
-        const illuminanceMaps = [];
-        illumTbody.querySelectorAll('tr').forEach((tr) => {
-            const nameEl = tr.querySelector('[data-field="name"]');
-            if (!nameEl) return;
-            const name = (nameEl.value || '').trim();
-            if (!name) return;
-
-            const zoneName = (tr.querySelector('[data-field="zoneName"]')?.value || '').trim();
-            if (!zoneName || !zoneSet.has(zoneName)) return;
-
-            const num = (field) => {
-                const el = tr.querySelector(`[data-field="${field}"]`);
-                if (!el) return NaN;
-                const v = parseFloat(el.value);
-                return v;
-            };
-
-            const xOrigin = num('xOrigin');
-            const yOrigin = num('yOrigin');
-            const zHeight = num('zHeight');
-            const xNumPoints = num('xNumPoints');
-            const xSpacing = num('xSpacing');
-            const yNumPoints = num('yNumPoints');
-            const ySpacing = num('ySpacing');
-
-            if (
-                !Number.isFinite(xOrigin) ||
-                !Number.isFinite(yOrigin) ||
-                !Number.isFinite(zHeight) ||
-                !Number.isFinite(xNumPoints) ||
-                !Number.isFinite(xSpacing) ||
-                !Number.isFinite(yNumPoints) ||
-                !Number.isFinite(ySpacing)
-            ) {
-                return;
-            }
-
-            illuminanceMaps.push({
-                name,
-                zoneName,
-                xOrigin,
-                yOrigin,
-                zHeight,
-                xNumPoints,
-                xSpacing,
-                yNumPoints,
-                ySpacing,
-            });
-        });
-
-        // Output:Variable (lighting/daylighting)
-        const vars = [];
-        outputVarsTbody.querySelectorAll('tr').forEach((tr) => {
-            const key = (tr.querySelector('[data-field="key"]')?.value || '').trim();
-            const variableName = (tr.querySelector('[data-field="variableName"]')?.value || '').trim();
-            const freq = (tr.querySelector('[data-field="freq"]')?.value || '').trim() || 'Hourly';
-            if (!key || !variableName) return;
-            vars.push({
-                key,
-                variableName,
-                reportingFrequency: freq,
-            });
-        });
-
-        const nextDaylighting = {};
-        if (controls.length) {
-            nextDaylighting.controls = controls;
-        }
-        if (illuminanceMaps.length || vars.length) {
-            nextDaylighting.outputs = {};
-            if (illuminanceMaps.length) {
-                nextDaylighting.outputs.illuminanceMaps = illuminanceMaps;
-            }
-            if (vars.length) {
-                nextDaylighting.outputs.variables = vars;
-            }
-        }
-
-        const nextEP = {
-            ...ep,
-            daylighting: nextDaylighting,
+        // Generate form fields
+        const renderLabel = (text, tooltip) => {
+            if (!tooltip) return `<label class="label">${text}</label>`;
+            return `
+                <label class="label">
+                    ${text}
+                    <span class="info-icon">i
+                        <span class="info-popover">${tooltip}</span>
+                    </span>
+                </label>
+            `;
         };
 
-        return { meta, nextEP };
-    }
+        const fieldsHtml = config.fields.map(field => {
+            const val = item[field.key] !== undefined ? item[field.key] : (field.default || '');
+            const tooltip = field.tooltip || '';
 
-    if (addIllumBtn) {
-        addIllumBtn.addEventListener('click', () => {
-            addIlluminanceMapRow();
-        });
-    }
-
-    if (addOutputVarBtn) {
-        addOutputVarBtn.addEventListener('click', () => {
-            addOutputVarRow();
-        });
-    }
-
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                const { meta, nextEP } = collectDaylightingFromUI();
-                if (typeof project.updateMetadata === 'function') {
-                    project.updateMetadata({
-                        ...meta,
-                        energyPlusConfig: nextEP,
-                    });
-                } else {
-                    project.metadata = {
-                        ...(project.metadata || meta),
-                        energyPlusConfig: nextEP,
-                    };
-                }
-                alert('Daylighting & Outputs configuration saved.');
-            } catch (err) {
-                console.error('DaylightingManager: save failed', err);
-                alert('Failed to save Daylighting configuration. Check console for details.');
+            if (field.type === 'select') {
+                return `
+                    <div class="mb-3 field-wrapper">
+                        ${renderLabel(field.label, tooltip)}
+                        <select class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                                data-key="${field.key}">
+                            <option value="">(Select)</option>
+                            ${field.options.map(o => `<option value="${o.value}" ${o.value == val ? 'selected' : ''}>${o.label}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+            } else if (field.type === 'number') {
+                const minAttr = field.min !== undefined ? `min="${field.min}"` : '';
+                const maxAttr = field.max !== undefined ? `max="${field.max}"` : '';
+                const stepAttr = field.step !== undefined ? `step="${field.step}"` : '';
+                return `
+                    <div class="mb-3 field-wrapper">
+                        ${renderLabel(field.label, tooltip)}
+                        <input type="number" ${stepAttr} ${minAttr} ${maxAttr}
+                               class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                               data-key="${field.key}" value="${val}">
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="mb-3 field-wrapper">
+                        ${renderLabel(field.label, tooltip)}
+                        <input type="text" class="w-full mt-1 text-xs bg-black/20 border border-gray-700 rounded p-1.5 focus:border-[--accent-color] focus:ring-1 focus:ring-[--accent-color] outline-none" 
+                               data-key="${field.key}" value="${val}">
+                    </div>
+                `;
             }
+        }).join('');
+
+        contentContainer.innerHTML = `
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h3 class="font-semibold text-sm uppercase">${isNew ? 'Add' : 'Edit'} ${config.itemName}</h3>
+                <button class="btn btn-xs btn-secondary" id="cancel-edit-btn">Cancel</button>
+            </div>
+            <div class="space-y-2" id="editor-fields">
+                ${fieldsHtml}
+                <div class="mt-4 pt-4 border-t border-gray-700 flex justify-end gap-2">
+                    <button class="btn btn-sm btn-primary" id="save-item-btn">Save</button>
+                </div>
+            </div>
+        `;
+
+        contentContainer.querySelector('#cancel-edit-btn').addEventListener('click', () => renderGenericManager(config));
+        contentContainer.querySelector('#save-item-btn').addEventListener('click', () => {
+            const inputs = contentContainer.querySelectorAll('[data-key]');
+            const newItem = { ...item };
+            inputs.forEach(input => {
+                const key = input.dataset.key;
+                let val = input.value;
+                if (input.type === 'number') val = val === '' ? undefined : parseFloat(val);
+                newItem[key] = val;
+            });
+
+            const newData = [...data];
+            if (isNew) {
+                newData.push(newItem);
+            } else {
+                newData[index] = newItem;
+            }
+            saveShadingState(config.dataKey, newData);
+            renderGenericManager(config);
         });
     }
 
-    // Initial render using existing config (supports legacy energyPlusConfig.daylighting)
-    renderControls();
-    renderIlluminanceMaps();
-    renderOutputVariables();
+    // Initial Render
+    renderCategories();
+    renderGenericManager(configs[activeTab]);
 
     return panel;
 }
+
 
 /**
  * OUTPUTS MANAGER
  * Manage energyPlusConfig.daylighting.outputs.variables (Output:Variable entries).
  */
 function openOutputsManagerPanel() {
-    const panelId = 'panel-energyplus-outputs';
-    let panel = document.getElementById(panelId);
-    if (!panel) {
-        panel = createOutputsManagerPanel();
-        document.getElementById('window-container').appendChild(panel);
-    }
-    panel.classList.remove('hidden');
-    panel.style.zIndex = getNewZIndex();
-}
+    const runPanel = document.getElementById('panel-run');
+    if (runPanel) {
+        runPanel.classList.remove('hidden');
+        runPanel.style.zIndex = getNewZIndex();
 
-function createOutputsManagerPanel() {
-    const panel = document.createElement('div');
-    panel.id = 'panel-energyplus-outputs';
-    panel.className = 'floating-window ui-panel resizable-panel';
-
-    panel.innerHTML = `
-        <div class="window-header">
-            <span>Outputs</span>
-            <div class="window-controls">
-                <div class="window-icon-max" title="Maximize/Restore"></div>
-                <div class="collapse-icon" title="Minimize"></div>
-                <div class="window-icon-close" title="Close"></div>
-            </div>
-        </div>
-        <div class="window-content space-y-2">
-            <div class="resize-handle-edge top"></div>
-            <div class="resize-handle-edge right"></div>
-            <div class="resize-handle-edge bottom"></div>
-            <div class="resize-handle-edge left"></div>
-            <div class="resize-handle-corner top-left"></div>
-            <div class="resize-handle-corner top-right"></div>
-            <div class="resize-handle-corner bottom-left"></div>
-            <div class="resize-handle-corner bottom-right"></div>
-
-            <p class="info-box !text-xs !py-1.5 !px-2">
-            <p class="info-box !text-xs !py-1.5 !px-2">
-                Configure <code>Output:Variable</code> entries.
-                Settings are stored in <code>energyPlusConfig.daylighting.outputs.variables</code>.
-            </p>
-
-            <div class="flex justify-between items-center">
-                <span class="font-semibold text-xs uppercase text-[--text-secondary]">Output Variables</span>
-                <button class="btn btn-xxs btn-secondary" data-action="add-output-var">+ Add Variable</button>
-            </div>
-
-            <div class="border border-gray-700/70 rounded bg-black/40 max-h-56 overflow-y-auto **scrollable-panel-inner**">
-                <table class="w-full text-xs">
-                    <thead class="bg-black/40">
-                        <tr>
-                            <th class="px-1 py-1 text-left">Key</th>
-                            <th class="px-1 py-1 text-left">Variable Name</th>
-                            <th class="px-1 py-1 text-left">Frequency</th>
-                            <th class="px-1 py-1 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="outputs-vars-tbody"></tbody>
-                </table>
-            </div>
-
-            <div class="text-xs text-[--text-secondary]">
-                Examples: Key = zone name or "Environment"; Variable = "Zone Lights Electric Power"; Frequency = Hourly/RunPeriod/etc.
-            </div>
-
-            <div class="flex justify-end gap-2">
-                <button class="btn btn-xxs btn-secondary" data-action="save-outputs">Save Outputs</button>
-            </div>
-        </div>
-    `;
-
-    if (typeof window !== 'undefined' && window.initializePanelControls) {
-        window.initializePanelControls(panel);
+        // Trigger click on Outputs item
+        const outputsItem = runPanel.querySelector('[data-section="outputs"]');
+        if (outputsItem) {
+            outputsItem.click();
+        }
     } else {
-        const closeButton = panel.querySelector('.window-icon-close');
-        if (closeButton) {
-            closeButton.onclick = () => panel.classList.add('hidden');
-        }
+        console.warn('Run Simulation panel not found');
     }
-
-    const tbody = panel.querySelector('.outputs-vars-tbody');
-    const addBtn = panel.querySelector('[data-action="add-output-var"]');
-    const saveBtn = panel.querySelector('[data-action="save-outputs"]');
-
-    function getState() {
-        const meta =
-            (typeof project.getMetadata === 'function' && project.getMetadata()) ||
-            project.metadata ||
-            {};
-        const ep = meta.energyPlusConfig || meta.energyplus || {};
-        const daylighting = ep.daylighting || {};
-        const outputs = daylighting.outputs || {};
-        const vars = Array.isArray(outputs.variables) ? outputs.variables.slice() : [];
-        return { meta, ep, daylighting, vars };
-    }
-
-    function render() {
-        const { vars } = getState();
-        tbody.innerHTML = '';
-
-        if (!vars.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="px-1 py-1 text-xs text-white" colspan="4">
-                    No Output:Variable entries defined.
-                </td>
-            `;
-            tbody.appendChild(tr);
-            return;
-        }
-
-        vars.forEach((v, index) => {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(index);
-            tr.innerHTML = `
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full text-xs" data-field="key" value="${v.key || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <input class="w-full text-xs" data-field="variableName" value="${v.variableName || ''}">
-                </td>
-                <td class="px-1 py-1 align-top">
-                    <select class="w-full text-xs" data-field="freq">
-                        ${['Timestep', 'Hourly', 'Daily', 'Monthly', 'RunPeriod'].map((f) => `
-                            <option value="${f}"${(v.reportingFrequency || 'Hourly') === f ? ' selected' : ''}>${f}</option>
-                        `).join('')}
-                    </select>
-                </td>
-                <td class="px-1 py-1 align-top text-right">
-                    <button class="btn btn-xxs btn-danger" data-action="delete-var">Delete</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        tbody.querySelectorAll('button[data-action="delete-var"]').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                const row = btn.closest('tr');
-                if (row) row.remove();
-            });
-        });
-    }
-
-    function addRow() {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="px-1 py-1 align-top">
-                <input class="w-full text-xs" data-field="key" placeholder="Key (zone name, Environment, *)">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <input class="w-full text-xs" data-field="variableName" placeholder="Variable Name">
-            </td>
-            <td class="px-1 py-1 align-top">
-                <select class="w-full text-xs" data-field="freq">
-                    <option value="Hourly" selected>Hourly</option>
-                    <option value="Timestep">Timestep</option>
-                    <option value="Daily">Daily</option>
-                    <option value="Monthly">Monthly</option>
-                    <option value="RunPeriod">RunPeriod</option>
-                </select>
-            </td>
-            <td class="px-1 py-1 align-top text-right">
-                <button class="btn btn-xxs btn-danger" data-action="delete-var">Delete</button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-        tr.querySelector('[data-action="delete-var"]').addEventListener('click', () => {
-            tr.remove();
-        });
-    }
-
-    function collect() {
-        const { meta, ep, daylighting } = getState();
-        const vars = [];
-        tbody.querySelectorAll('tr').forEach((tr) => {
-            const key = (tr.querySelector('[data-field="key"]')?.value || '').trim();
-            const variableName = (tr.querySelector('[data-field="variableName"]')?.value || '').trim();
-            const freq = tr.querySelector('[data-field="freq"]')?.value || 'Hourly';
-            if (!key || !variableName) return;
-            vars.push({
-                key,
-                variableName,
-                reportingFrequency: freq,
-            });
-        });
-
-        const nextDaylighting = {
-            ...daylighting,
-            outputs: {
-                ...(daylighting.outputs || {}),
-                variables: vars,
-            },
-        };
-
-        const nextEP = {
-            ...ep,
-            daylighting: nextDaylighting,
-        };
-
-        return { meta, nextEP };
-    }
-
-    if (addBtn) {
-        addBtn.addEventListener('click', () => addRow());
-    }
-
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            try {
-                const { meta, nextEP } = collect();
-                if (typeof project.updateMetadata === 'function') {
-                    project.updateMetadata({
-                        ...meta,
-                        energyPlusConfig: nextEP,
-                    });
-                } else {
-                    project.metadata = {
-                        ...(project.metadata || meta),
-                        energyPlusConfig: nextEP,
-                    };
-                }
-                alert('Outputs configuration saved.');
-            } catch (err) {
-                console.error('OutputsManager: save failed', err);
-                alert('Failed to save Outputs configuration. Check console for details.');
-            }
-        });
-    }
-
-    render();
-
-    return panel;
 }
+
+
 
 /**
  * ENERGYPLUS SIMULATION CONTROL MANAGER
@@ -6458,8 +4016,11 @@ export {
     openSchedulesManagerPanel,
     openZoneLoadsManagerPanel,
     openThermostatsPanel,
-    openDaylightingManagerPanel,
+
     openOutputsManagerPanel,
-    openOutdoorAirManagerPanel,
-    openShadingManagerPanel
+
+    openShadingManagerPanel,
+    openDiagnosticsPanel,
+    openRecipePanel,
+    recipes
 };
