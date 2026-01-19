@@ -1,0 +1,436 @@
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const path = require('path');
+const os = require('os');
+const { exec, spawn } = require('child_process');
+const fs = require('fs');
+const fsp = require('fs/promises');
+
+let mainWindow;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  mainWindow.loadFile('index.html');
+
+  // mainWindow.webContents.openDevTools(); // Uncomment to see developer tools
+}
+
+app.whenReady().then(() => {
+  // --- IPC HANDLERS ---
+
+  // Handle request to open a directory
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+    });
+    if (!canceled) {
+      return filePaths[0];
+    }
+    return null;
+  });
+
+  // Handle request to open a file
+  ipcMain.handle('dialog:openFile', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openFile'],
+    });
+    if (!canceled) {
+      return filePaths[0];
+    }
+    return null;
+  });
+
+  // Handle request to save the entire project
+  ipcMain.handle('fs:saveProject', async (event, { projectPath, files }) => {
+    for (const file of files) {
+      try {
+        const fullPath = path.join(projectPath, ...file.path);
+        const dir = path.dirname(fullPath);
+        await fsp.mkdir(dir, { recursive: true });
+        await fsp.writeFile(fullPath, file.content);
+      } catch (err) {
+        console.error(`Failed to save file: ${file.path.join('/')}`, err);
+        return false;
+      }
+    }
+    return true;
+  });
+
+
+  // Handle request to run a simulation script
+  ipcMain.on('run-script', (event, { projectPath, scriptName }) => {
+    const scriptPath = path.join(projectPath, '07_scripts', scriptName);
+    const isWindows = process.platform === 'win32';
+    const scriptDir = path.dirname(scriptPath); // Get the script's directory
+    // For Windows, the command is just the script name. Rely on 'cwd'.
+    // For non-Windows, ensure executable and run.
+    const command = isWindows ? scriptName : `chmod +x "${scriptPath}" && "${scriptPath}"`;
+
+    const child = exec(command, { cwd: scriptDir }); // Set cwd to the script's directory
+
+    child.stdout.on('data', (data) => {
+      event.sender.send('script-output', data.toString());
+    });
+
+    child.stderr.on('data', (data) => {
+      event.sender.send('script-output', `ERROR: ${data.toString()}`);
+    });
+
+    child.on('exit', (code) => {
+      event.sender.send('script-exit', code);
+    });
+  });
+
+  /**
+   * EnergyPlus IPC bridge (updated contract).
+   *
+   * Renderer calls: window.electronAPI.runEnergyPlus({
+   *   idfPath,
+   *   epwPath,
+   *   energyPlusPath,
+   *   runName?,   // e.g. "annual", "heating-design", ...
+   *   runId?      // optional; if omitted, we generate one
+   * })
+   *
+   * Emits to renderer:
+   *  - 'energyplus-output': { runId, chunk, stream }
+   *  - 'energyplus-exit': {
+   *        runId,
+   *        exitCode,
+   *        outputDir,
+   *        errContent?,      // optional eplusout.err contents
+   *        csvContents?      // reserved for future use
+   *    }
+   *
+   * Multiple runs may be in-flight; all events are tagged by runId.
+   */
+  // Resolve a path coming from the renderer:
+  // - If absolute, use as-is.
+  // - If relative, interpret as relative to the current working directory
+  //   (which is treated as the project root for EnergyPlus runs).
+  function resolveProjectPath(inputPath) {
+    if (typeof inputPath !== 'string' || !inputPath.trim()) {
+      return null;
+    }
+    const trimmed = inputPath.trim();
+    if (path.isAbsolute(trimmed)) {
+      return trimmed;
+    }
+    return path.join(process.cwd(), trimmed);
+  }
+
+  ipcMain.on('run-energyplus', (_event, options = {}) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    try {
+      const {
+        idfPath,
+        epwPath,
+        energyPlusPath,
+        runName = 'energyplus-run',
+        runId: providedRunId,
+      } = options || {};
+
+      const runId = providedRunId || `${runName}-${Date.now()}`;
+
+      if (!idfPath || !epwPath || !energyPlusPath) {
+        mainWindow.webContents.send('energyplus-exit', {
+          runId,
+          exitCode: 1,
+          errContent:
+            'EnergyPlus run aborted: idfPath, epwPath, and energyPlusPath are required.',
+        });
+        return;
+      }
+
+      // Canonical resolution:
+      // - idfPath and epwPath:
+      //     absolute => used directly
+      //     relative => resolved against project root (process.cwd()).
+      const resolvedIdf = resolveProjectPath(idfPath);
+      const resolvedEpw = resolveProjectPath(epwPath);
+      const resolvedExe = energyPlusPath.trim();
+
+      if (!resolvedIdf || !resolvedEpw || !resolvedExe) {
+        mainWindow.webContents.send('energyplus-exit', {
+          runId,
+          exitCode: 1,
+          errContent:
+            'EnergyPlus run aborted: failed to resolve idfPath, epwPath, or energyPlusPath.',
+        });
+        return;
+      }
+
+      const projectRoot = process.cwd();
+      const runsDir = path.join(projectRoot, 'runs');
+      if (!fs.existsSync(runsDir)) {
+        fs.mkdirSync(runsDir, { recursive: true });
+      }
+      const outputDir = path.join(runsDir, runName);
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      // Standardized invocation:
+      //  -w <epw>     weather file
+      //  -d <dir>     output directory (runs/{runName})
+      //  idf          input IDF (model.idf or user-selected)
+      const args = ['-w', resolvedEpw, '-d', outputDir, resolvedIdf];
+
+      const child = spawn(resolvedExe, args, {
+        cwd: projectRoot,
+        shell: false,
+      });
+
+      const sendOutput = (chunk, stream) => {
+        if (!chunk || !mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send('energyplus-output', {
+          runId,
+          chunk: chunk.toString(),
+          stream,
+        });
+      };
+
+      child.stdout.on('data', (data) => sendOutput(data, 'stdout'));
+      child.stderr.on('data', (data) => sendOutput(data, 'stderr'));
+
+      child.on('error', (err) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send('energyplus-exit', {
+          runId,
+          exitCode: 1,
+          outputDir,
+          errContent: `Failed to start EnergyPlus: ${err.message}`,
+        });
+      });
+
+      child.on('close', (code) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+
+        let errContent;
+        const errPath = path.join(outputDir, 'eplusout.err');
+        try {
+          if (fs.existsSync(errPath)) {
+            errContent = fs.readFileSync(errPath, 'utf8');
+          }
+        } catch {
+          // ignore
+        }
+
+        const payload = {
+          runId,
+          exitCode: typeof code === 'number' ? code : 0,
+          outputDir,
+          errContent,
+        };
+
+        mainWindow.webContents.send('energyplus-exit', payload);
+      });
+    } catch (err) {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send('energyplus-exit', {
+        runId: options.runId || options.runName || 'energyplus-run',
+        exitCode: 1,
+        errContent: `EnergyPlus bridge internal error: ${err.message}`,
+      });
+    }
+  });
+
+
+  // Handle request to run a script headlessly (without sending streaming output)
+  ipcMain.handle('run-script-headless', async (event, { projectPath, scriptContent, scriptName }) => {
+    // If no specific name is given, create a temporary one
+    const finalScriptName = scriptName || `temp-sim-${Date.now()}.sh`;
+    const scriptPath = path.join(projectPath, '07_scripts', finalScriptName);
+    const scriptDir = path.dirname(scriptPath);
+
+    try {
+      await fsp.mkdir(scriptDir, { recursive: true });
+      await fsp.writeFile(scriptPath, scriptContent);
+
+      return new Promise((resolve) => {
+        const isWindows = process.platform === 'win32';
+        // For Windows, the command is just the script name. Rely on 'cwd'.
+        // For non-Windows, ensure executable and run.
+        const command = isWindows
+          ? finalScriptName
+          : `chmod +x "${scriptPath}" && "${scriptPath}"`;
+
+        exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+          // Clean up the temporary script
+          if (!scriptName) {
+            fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
+          }
+
+          if (error) {
+            console.error(`Headless exec error: ${error}`);
+            resolve({ success: false, stdout: stdout, stderr: stderr, code: error.code });
+            return;
+          }
+          resolve({ success: true, stdout: stdout, stderr: stderr, code: 0 });
+        });
+      });
+    } catch (err) {
+      console.error("Failed during headless script setup:", err);
+      return { success: false, stderr: err.message, code: -1 };
+    }
+  });
+
+  // Handle request to run multiple simulations in parallel with a concurrency limit
+  ipcMain.handle('run-simulations-parallel', async (event, { simulations }) => {
+    const maxConcurrent = Math.max(1, os.cpus().length - 1);
+    const results = new Array(simulations.length);
+    const queue = simulations.map((sim, index) => ({ ...sim, originalIndex: index })); // Keep track of original order
+
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const task = queue.shift();
+        if (task) {
+          console.log(`Worker picking up task ${task.originalIndex}`);
+          const result = await new Promise(async (resolve) => {
+            const finalScriptName = task.scriptName || `temp-sim-${task.originalIndex}-${Date.now()}.sh`;
+            const scriptPath = path.join(task.projectPath, '07_scripts', finalScriptName);
+            const scriptDir = path.dirname(scriptPath);
+
+            try {
+              await fsp.mkdir(scriptDir, { recursive: true });
+              await fsp.writeFile(scriptPath, task.scriptContent);
+
+              const isWindows = process.platform === 'win32';
+              // For Windows, the command is just the script name. Rely on 'cwd'.
+              // For non-Windows, ensure executable and run.
+              const command = isWindows ? finalScriptName : `chmod +x "${scriptPath}" && "${scriptPath}"`;
+
+              exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+                if (!task.scriptName) {
+                  fsp.unlink(scriptPath).catch(err => console.error("Failed to delete temp script:", err));
+                }
+                if (error) {
+                  resolve({ success: false, stdout, stderr, code: error.code });
+                } else {
+                  resolve({ success: true, stdout, stderr, code: 0 });
+                }
+              });
+            } catch (err) {
+              resolve({ success: false, stderr: err.message, code: -1 });
+            }
+          });
+          results[task.originalIndex] = result;
+          console.log(`Worker finished task ${task.originalIndex}`);
+        }
+      }
+    };
+
+    const workers = Array(maxConcurrent).fill(null).map(() => runWorker());
+    await Promise.all(workers);
+
+    return results;
+  });
+
+  // Handle request to read a file and return its content
+  ipcMain.handle('fs:readFile', async (event, { projectPath, filePath }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:readFile - Invalid projectPath or filePath', { projectPath, filePath });
+        return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
+      }
+      const fullPath = path.join(projectPath, filePath);
+      const content = await fsp.readFile(fullPath); // Returns a Buffer
+      return { success: true, content: content, name: path.basename(filePath) };
+    } catch (err) {
+      console.error(`Failed to read file: ${filePath}`, err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Handle request to check if a file exists
+  ipcMain.handle('fs:checkFileExists', async (event, { projectPath, filePath }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:checkFileExists - Invalid projectPath or filePath', { projectPath, filePath });
+        return false;
+      }
+      const fullPath = path.join(projectPath, filePath);
+      await fsp.access(fullPath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  // Handle request to write a file
+  ipcMain.handle('fs:writeFile', async (event, { projectPath, filePath, content }) => {
+    try {
+      if (typeof projectPath !== 'string' || typeof filePath !== 'string' || !projectPath || !filePath) {
+        console.error('fs:writeFile - Invalid projectPath or filePath', { projectPath, filePath });
+        return { success: false, error: 'Invalid projectPath or filePath', projectPath, filePath };
+      }
+      const fullPath = path.join(projectPath, filePath);
+      const dir = path.dirname(fullPath);
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(fullPath, content);
+      return { success: true };
+    } catch (err) {
+      console.error(`Failed to write file: ${filePath}`, err);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Handle request to run a Python script
+  ipcMain.handle('run-python-script', async (event, { projectPath, scriptPath }) => {
+    return new Promise((resolve) => {
+      const fullScriptPath = path.join(projectPath, scriptPath);
+      const scriptDir = path.dirname(fullScriptPath);
+
+      // Use python3 command (works on macOS/Linux, may need adjustment for Windows)
+      const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+      const command = `${pythonCommand} "${fullScriptPath}"`;
+
+      console.log(`Executing Python script: ${command}`);
+
+      exec(command, { cwd: scriptDir }, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Python script error: ${error}`);
+          resolve({
+            success: false,
+            stdout: stdout,
+            stderr: stderr,
+            error: error.message,
+            code: error.code
+          });
+          return;
+        }
+
+        console.log(`Python script completed successfully`);
+        resolve({
+          success: true,
+          stdout: stdout,
+          stderr: stderr,
+          code: 0
+        });
+      });
+    });
+  });
+
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
