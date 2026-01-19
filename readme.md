@@ -8,7 +8,7 @@ Flux Modeler is a comprehensive desktop application providing a graphical user i
 
 ## Table of Contents
 
-- [Energy Modeler △](#energy-modeler-)
+- [Flux Modeler △](#flux-modeler-)
   - [Table of Contents](#table-of-contents)
   - [🚀 Getting Started](#-getting-started)
   - [✨ Core Capabilities](#-core-capabilities)
@@ -376,10 +376,10 @@ Before you begin, ensure you have the following installed on your system:
 
     ```bash
     # Clone the repository
-    git clone [https://github.com/your-username/ray-modeler.git](https://github.com/your-username/ray-modeler.git)
+    git clone https://github.com/akontadakis/Flux-Modeler.git
     
     # Navigate into the project directory
-    cd ray-modeler
+    cd Flux-Modeler
     
     # Install the necessary npm packages
     npm install
