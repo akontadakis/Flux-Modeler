@@ -1035,123 +1035,81 @@ export function createShadingDevices() {
     const allWindows = getAllWindowParams();
     const allShading = getAllShadingParams();
 
-    if (!allWindows || !allShading) return;
-
-    const shadeColor = getComputedStyle(document.documentElement).getPropertyValue('--shading-color').trim();
-    const { W, L } = readParams();
-
+    // Create a container that matches the room origin logic
+    const { W, L, H } = readParams();
     const shadingContainer = new THREE.Group();
-    // Room-local origin at (-W/2, 0, -L/2) to match wall/window construction
+    // Match the room container position from createRoomGeometry
     shadingContainer.position.set(-W / 2, 0, -L / 2);
 
-    for (const [orientation, winParams] of Object.entries(allWindows)) {
-        const shadeParams = allShading[orientation];
-        if (!winParams || !shadeParams) continue;
+    // --- Wall Helper Groups ---
+    // These groups mirror the exact position and rotation of the walls in _createWalls.
+    // This allows us to place shading devices using the LOCAL coordinates (aperture.position).
+    const wallGroups = {};
+    const wallDefinitions = {
+        N: { p: [W / 2, H / 2, 0], r: [0, Math.PI, 0] },
+        S: { p: [W / 2, H / 2, L], r: [0, 0, 0] },
+        W: { p: [0, H / 2, L / 2], r: [0, -Math.PI / 2, 0] },
+        E: { p: [W, H / 2, L / 2], r: [0, -Math.PI / 2, 0] }
+    };
 
-        const { ww, wh, sh, winCount, mode, wallWidth, winDepthPos } = winParams;
-        if (!ww || !wh || !winCount) continue;
-
-        const outward = getWallOutwardNormal(orientation);
-        if (outward.lengthSq() === 0) continue;
-
-        // Use standard positive depth for all orientations
-        const effectiveWinDepthPos = winDepthPos;
-
-        const spacing = mode === 'wwr' ? 0.1 : ww / 2;
-        const groupWidth = winCount * ww + Math.max(0, winCount - 1) * spacing;
-        const startOffset = (wallWidth - groupWidth) / 2;
-
-        // Glass center lies at effectiveWinDepthPos along outward (positive: towards exterior)
-        const glassOffset = outward.clone().multiplyScalar(effectiveWinDepthPos);
-
-        for (let i = 0; i < winCount; i++) {
-            const winStartPos = startOffset + i * (ww + spacing);
-            const windowCenterLocal = (() => {
-                switch (orientation) {
-                    case 'N': return new THREE.Vector3(winStartPos + ww / 2, sh, 0);
-                    case 'S': return new THREE.Vector3(winStartPos + ww / 2, sh, L);
-                    case 'W': return new THREE.Vector3(0, sh, winStartPos + ww / 2);
-                    case 'E': return new THREE.Vector3(W, sh, winStartPos + ww / 2);
-                    default: return new THREE.Vector3(0, sh, 0);
-                }
-            })();
-
-            let deviceGroup = null;
-
-            if (shadeParams.type === 'overhang' && shadeParams.overhang) {
-                deviceGroup = createOverhang(ww, wh, shadeParams.overhang, shadeColor, outward, orientation);
-            } else if (shadeParams.type === 'lightshelf' && shadeParams.lightshelf) {
-                deviceGroup = createLightShelf(ww, wh, sh, shadeParams.lightshelf, shadeColor, outward);
-            } else if (shadeParams.type === 'louver' && shadeParams.louver) {
-                deviceGroup = createLouvers(ww, wh, shadeParams.louver, shadeColor, outward);
-            } else if (shadeParams.type === 'roller' && shadeParams.roller) {
-                deviceGroup = createRoller(ww, wh, shadeParams.roller, shadeColor, outward);
-            } else if (shadeParams.type === 'imported_obj' && shadeParams.imported_obj) {
-                deviceGroup = createImportedShading(shadeParams.imported_obj, shadeColor, orientation, i);
-            }
-
-            if (!deviceGroup) continue;
-
-            // Define wall rotations (must match _createWallSegment)
-            const wallRotations = {
-                N: [0, Math.PI, 0],
-                S: [0, 0, 0],
-                W: [0, -Math.PI / 2, 0],
-                E: [0, Math.PI / 2, 0]
-            };
-
-            // Apply the correct wall rotation to the shading device
-            const rotation = wallRotations[orientation];
-            if (rotation) {
-                deviceGroup.rotation.set(...rotation);
-            }
-
-            // Place deviceGroup origin at window center, then offset relative to glass position
-            // Add glassOffset to move outwards from the wall center
-            const base = windowCenterLocal.clone().add(glassOffset);
-            deviceGroup.position.copy(base);
-
-            shadingContainer.add(deviceGroup);
-
-            // Dev-only sanity check (guarded to avoid errors in browser-only environments):
-            const isDevEnv =
-                typeof process !== 'undefined' &&
-                process.env &&
-                process.env.NODE_ENV === 'development';
-
-            if (isDevEnv && shadeParams.type !== 'roller') {
-                const sample = deviceGroup.position.clone();
-                const rel = sample.clone().sub(windowCenterLocal);
-                const dot = rel.dot(outward);
-
-                if (dot < -1e-3) {
-                    console.warn('[shading] Shading device appears on interior side of glazing.', {
-                        orientation,
-                        deviceIndex: i,
-                        dotProduct: dot.toFixed(4)
-                    });
-                }
-            }
-        }
+    for (const [key, def] of Object.entries(wallDefinitions)) {
+        const group = new THREE.Group();
+        group.position.set(...def.p);
+        group.rotation.set(...def.r);
+        group.name = `WallGroup_${key}`;
+        wallGroups[key] = group;
+        shadingContainer.add(group);
     }
 
-    // --- Detached Shading (Site/Building) ---
+    const shadeColor = getComputedStyle(document.documentElement).getPropertyValue('--shading-color').trim();
+
+    // --- 1. Global/Bulk Shading (Per Layout) ---
+    // Iterate over all REGISTERED apertures to apply bulk settings if they match the wall.
+    const allApertures = getAllApertures();
+
+    allApertures.forEach(aperture => {
+        const orientation = aperture.wallIdUpper; // N, S, E, W
+        const shadeParams = allShading?.[orientation];
+
+        if (!shadeParams) return;
+
+        // Find the correct generic shading creator
+        let deviceGroup = null;
+        const { width: ww, height: wh } = aperture.dimensions;
+        const sh = aperture.sillHeight;
+
+        if (shadeParams.type === 'overhang' && shadeParams.overhang) {
+            deviceGroup = createOverhang(ww, wh, shadeParams.overhang, shadeColor);
+        } else if (shadeParams.type === 'lightshelf' && shadeParams.lightshelf) {
+            deviceGroup = createLightShelf(ww, wh, sh, shadeParams.lightshelf, shadeColor);
+        } else if (shadeParams.type === 'louver' && shadeParams.louver) {
+            deviceGroup = createLouvers(ww, wh, shadeParams.louver, shadeColor, shadeParams.louver.isExterior);
+        } else if (shadeParams.type === 'roller' && shadeParams.roller) {
+            deviceGroup = createRoller(ww, wh, shadeParams.roller, shadeColor);
+        } else if (shadeParams.type === 'imported_obj' && shadeParams.imported_obj) {
+            deviceGroup = createImportedShading(shadeParams.imported_obj, shadeColor, orientation, aperture.index);
+        }
+
+        if (deviceGroup) {
+            // Place at Aperture Local Position
+            deviceGroup.position.copy(aperture.position);
+            // Add to the correct Wall Group
+            wallGroups[orientation].add(deviceGroup);
+        }
+    });
+
+    // --- 2. Site/Context Shading ---
     siteShadingContextGroup.clear();
     const siteSurfaces = project.shading?.siteSurfaces || [];
     siteSurfaces.forEach(surface => {
         if (!surface.vertices || surface.vertices.length < 3) return;
-
         const pts = surface.vertices.map(v => new THREE.Vector3(v.x, v.y, v.z));
-        let geom;
-
-        // Triangulate convex polygon (Fan from v0)
         const vertices = [];
         for (let k = 1; k < pts.length - 1; k++) {
             vertices.push(pts[0], pts[k], pts[k + 1]);
         }
-        geom = new THREE.BufferGeometry().setFromPoints(vertices);
+        const geom = new THREE.BufferGeometry().setFromPoints(vertices);
         geom.computeVertexNormals();
-
         const mesh = new THREE.Mesh(geom, shared.shadeMat);
         mesh.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
         mesh.name = surface.name || 'SiteShading';
@@ -1160,55 +1118,48 @@ export function createShadingDevices() {
         if (surface.type === 'Site') {
             siteShadingContextGroup.add(mesh);
         } else {
-            // Building relative - adds to shadingContainer which is part of shadingObject (rotates with building)
             shadingContainer.add(mesh);
         }
     });
 
     shadingObject.add(shadingContainer);
 
-    // --- Aperture-Based Shading Devices (Overhangs & Fins) ---
-    // Read aperture shading devices from project metadata
+    // --- 3. Aperture-Specific Shading Devices (The Panel UI) ---
     const renderApertureDevices = async () => {
         try {
             const { project } = await import('./project.js');
-            if (typeof project.getApertureShadingDevices !== 'function') {
-                return; // Method not available
-            }
+            if (typeof project.getApertureShadingDevices !== 'function') return;
 
             const apertureDevices = await project.getApertureShadingDevices();
-            if (!apertureDevices || apertureDevices.length === 0) {
-                return; // No aperture devices configured
-            }
+            if (!apertureDevices || apertureDevices.length === 0) return;
 
-            const shadeColor = getComputedStyle(document.documentElement).getPropertyValue('--shading-color').trim();
-
-            // Process each aperture with configured devices
             apertureDevices.forEach(deviceConfig => {
                 const aperture = getApertureById(deviceConfig.apertureId);
-                if (!aperture) {
-                    console.warn(`[createShadingDevices] Aperture '${deviceConfig.apertureId}' not found`);
-                    return;
-                }
+                if (!aperture) return;
+
+                const wallGroup = wallGroups[aperture.wallIdUpper];
+                if (!wallGroup) return;
 
                 // Create overhangs
-                if (deviceConfig.overhangs && deviceConfig.overhangs.length > 0) {
+                if (deviceConfig.overhangs?.length > 0) {
                     deviceConfig.overhangs.forEach((overhangParams, idx) => {
                         const overhangGroup = createApertureOverhang(aperture, overhangParams, shadeColor);
                         if (overhangGroup) {
                             overhangGroup.name = `${deviceConfig.apertureId}_Overhang${idx}`;
-                            shadingContainer.add(overhangGroup);
+                            overhangGroup.position.copy(aperture.position);
+                            wallGroup.add(overhangGroup);
                         }
                     });
                 }
 
                 // Create fins
-                if (deviceConfig.fins && deviceConfig.fins.length > 0) {
+                if (deviceConfig.fins?.length > 0) {
                     deviceConfig.fins.forEach((finParams, idx) => {
                         const finGroup = createApertureFins(aperture, finParams, shadeColor);
                         if (finGroup) {
                             finGroup.name = `${deviceConfig.apertureId}_Fins${idx}`;
-                            shadingContainer.add(finGroup);
+                            finGroup.position.copy(aperture.position);
+                            wallGroup.add(finGroup);
                         }
                     });
                 }
@@ -1218,37 +1169,33 @@ export function createShadingDevices() {
         }
     };
 
-    // Execute async rendering
     renderApertureDevices();
 }
 
 /**
  * Creates an overhang shading device for a specific aperture.
- * @param {object} aperture - Aperture metadata (id, position, dimensions, wallId, etc.)
- * @param {object} params - Overhang parameters (depth, heightAbove, tiltAngle, leftExtension, rightExtension)
- * @param {string} color - Hex color string for the device
+ * @param {object} aperture - Aperture metadata
+ * @param {object} params - Overhang parameters
+ * @param {string} color - Hex color string
  * @returns {THREE.Group|null} Overhang group or null if invalid
  */
 function createApertureOverhang(aperture, params, color) {
     const { depth, heightAbove, tiltAngle, leftExtension, rightExtension } = params;
-    const thickness = 0.05; // Default overhang thickness
+    const thickness = 0.05;
 
     if (!depth || depth <= 0) return null;
 
     const assembly = new THREE.Group();
     const pivot = new THREE.Group();
 
-    // Position overhang above the window
     const apertureHeight = aperture.dimensions.height || 2.0;
     pivot.position.y = apertureHeight / 2 + (heightAbove || 0);
 
-    // Tilt angle: 90° = horizontal (parallel to ground), 0° = vertical down
     const tilt = tiltAngle !== undefined ? tiltAngle : 90;
     pivot.rotation.x = THREE.MathUtils.degToRad(tilt - 90);
 
     assembly.add(pivot);
 
-    // Overhang dimensions
     const apertureWidth = aperture.dimensions.width || 1.5;
     const totalWidth = apertureWidth + (leftExtension || 0) + (rightExtension || 0);
 
@@ -1257,32 +1204,14 @@ function createApertureOverhang(aperture, params, color) {
     material.color.set(color);
     const overhangMesh = new THREE.Mesh(overhangGeom, material);
 
-    // Center horizontally, adjust for asymmetric extensions
     overhangMesh.position.x = ((rightExtension || 0) - (leftExtension || 0)) / 2;
     overhangMesh.position.y = thickness / 2;
-    overhangMesh.position.z = depth / 2; // Push outward
+    overhangMesh.position.z = depth / 2;
 
     overhangMesh.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
     applyClippingToMaterial(overhangMesh.material, renderer.clippingPlanes);
 
     pivot.add(overhangMesh);
-
-    // Apply wall rotation and position based on aperture location
-    const { wallId, position } = aperture;
-    const wallRotations = {
-        n: [0, Math.PI, 0],
-        s: [0, 0, 0],
-        w: [0, -Math.PI / 2, 0],
-        e: [0, Math.PI / 2, 0]
-    };
-
-    const rotation = wallRotations[wallId];
-    if (rotation) {
-        assembly.rotation.set(...rotation);
-    }
-
-    // Position at aperture center
-    assembly.position.copy(position);
 
     return assembly;
 }
@@ -1311,14 +1240,21 @@ function createApertureFins(aperture, params, color) {
 
     // Fin extends from below window bottom to above window top
     const finHeight = apertureHeight + (heightAbove || 0) + (heightBelow || 0);
-    const finYCenter = (heightAbove || 0) - (heightBelow || 0);
+    // Center point Y for the fin geometry.
+    // Window Center (Local 0) is at mid-height.
+    // Fin spans [-heightBelow - H/2, +heightAbove + H/2].
+    // Fin Center = (SkyTop + GndBot) / 2.
+    // Top = H/2 + Above.
+    // Bot = -H/2 - Below.
+    // Center = (H/2 + Above - H/2 - Below) / 2 = (Above - Below) / 2.
+    const finYCenter = ((heightAbove || 0) - (heightBelow || 0)) / 2;
 
     // Left fin
     if (leftDepth && leftDepth > 0) {
         const leftFinGeom = new THREE.BoxGeometry(finThickness, finHeight, leftDepth);
         const leftFinMesh = new THREE.Mesh(leftFinGeom, material.clone());
         leftFinMesh.position.x = -apertureWidth / 2 - finThickness / 2;
-        leftFinMesh.position.y = finYCenter / 2;
+        leftFinMesh.position.y = finYCenter;
         leftFinMesh.position.z = leftDepth / 2; // Push outward
 
         leftFinMesh.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
@@ -1331,7 +1267,7 @@ function createApertureFins(aperture, params, color) {
         const rightFinGeom = new THREE.BoxGeometry(finThickness, finHeight, rightDepth);
         const rightFinMesh = new THREE.Mesh(rightFinGeom, material.clone());
         rightFinMesh.position.x = apertureWidth / 2 + finThickness / 2;
-        rightFinMesh.position.y = finYCenter / 2;
+        rightFinMesh.position.y = finYCenter;
         rightFinMesh.position.z = rightDepth / 2; // Push outward
 
         rightFinMesh.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
@@ -1339,22 +1275,7 @@ function createApertureFins(aperture, params, color) {
         assembly.add(rightFinMesh);
     }
 
-    // Apply wall rotation and position based on aperture location
-    const { wallId, position } = aperture;
-    const wallRotations = {
-        n: [0, Math.PI, 0],
-        s: [0, 0, 0],
-        w: [0, -Math.PI / 2, 0],
-        e: [0, Math.PI / 2, 0]
-    };
-
-    const rotation = wallRotations[wallId];
-    if (rotation) {
-        assembly.rotation.set(...rotation);
-    }
-
-    // Position at aperture center
-    assembly.position.copy(position);
+    // No manual rotation or position copy here - parent adds it to wall group and sets position.
 
     return assembly;
 }
@@ -1362,12 +1283,12 @@ function createApertureFins(aperture, params, color) {
 /**
  * Creates a single overhang device.
  */
-function createOverhang(winWidth, winHeight, params, color, outward, orientation) {
+function createOverhang(winWidth, winHeight, params, color) {
     const { distAbove, tilt, depth, leftExtension, rightExtension, thick } = params; if (depth <= 0) return null;
 
     const assembly = new THREE.Group();
     const pivot = new THREE.Group();
-    pivot.position.y = winHeight + distAbove;
+    pivot.position.y = (winHeight / 2) + distAbove;
     // Adjust rotation: 90° is flat (parallel to ground), 0° is vertical down.
     pivot.rotation.x = THREE.MathUtils.degToRad(tilt - 90);
     assembly.add(pivot);
@@ -1382,10 +1303,6 @@ function createOverhang(winWidth, winHeight, params, color, outward, orientation
     applyClippingToMaterial(overhangMesh.material, renderer.clippingPlanes);
 
     overhangMesh.position.y = thick / 2;
-
-    // The parent group is rotated so its local Z-axis always points outward.
-    // A positive Z translation in local space will always move the device outward.
-    // The overhang's geometry is centered, so we shift it by half its depth.
     overhangMesh.position.z = depth / 2;
 
     pivot.add(overhangMesh);
@@ -1395,7 +1312,7 @@ function createOverhang(winWidth, winHeight, params, color, outward, orientation
 /**
  * Creates a light shelf assembly.
  */
-function createLightShelf(winWidth, winHeight, sillHeight, params, color, outward) {
+function createLightShelf(winWidth, winHeight, sillHeight, params, color) {
     const assembly = new THREE.Group();
     const { placeExt, placeInt, placeBoth, depthExt, depthInt, tiltExt, tiltInt, distBelowExt, distBelowInt, thickExt, thickInt } = params;
     const material = shared.shadeMat.clone();
@@ -1410,7 +1327,7 @@ function createLightShelf(winWidth, winHeight, sillHeight, params, color, outwar
         // External shelf: position it outward along the local +Z axis.
         shelfMesh.position.z = depthExt / 2;
 
-        pivot.position.y = winHeight - distBelowExt;
+        pivot.position.y = (winHeight / 2) - distBelowExt;
         pivot.rotation.x = THREE.MathUtils.degToRad(tiltExt);
         pivot.add(shelfMesh);
         assembly.add(pivot);
@@ -1423,7 +1340,7 @@ function createLightShelf(winWidth, winHeight, sillHeight, params, color, outwar
         // Internal shelf: position it inward along the local -Z axis.
         shelfMesh.position.z = -depthInt / 2;
 
-        pivot.position.y = winHeight - distBelowInt;
+        pivot.position.y = (winHeight / 2) - distBelowInt;
         pivot.rotation.x = THREE.MathUtils.degToRad(tiltInt);
         pivot.add(shelfMesh);
         assembly.add(pivot);
@@ -1434,8 +1351,8 @@ function createLightShelf(winWidth, winHeight, sillHeight, params, color, outwar
 /**
  * Creates a louver assembly.
  */
-function createLouvers(winWidth, winHeight, params, color, outward) {
-    const { isExterior, isHorizontal, slatWidth, slatSep, slatThick, slatAngle, distToGlass } = params;
+function createLouvers(winWidth, winHeight, params, color, isExterior = true) {
+    const { isHorizontal, slatWidth, slatSep, slatThick, slatAngle, distToGlass } = params;
     if (slatWidth <= 0 || slatSep <= 0) return null;
 
     const assembly = new THREE.Group();
@@ -1455,7 +1372,7 @@ function createLouvers(winWidth, winHeight, params, color, outward) {
             const pivot = new THREE.Group();
             const slat = new THREE.Mesh(slatGeom, material);
             slat.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
-            pivot.position.set(0, i * slatSep + slatSep / 2, zOffset);
+            pivot.position.set(0, (i * slatSep + slatSep / 2) - winHeight / 2, zOffset);
             pivot.rotation.x = angleRad;
             pivot.add(slat);
             assembly.add(pivot);
@@ -1467,7 +1384,7 @@ function createLouvers(winWidth, winHeight, params, color, outward) {
             const pivot = new THREE.Group();
             const slat = new THREE.Mesh(slatGeom, material);
             slat.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
-            pivot.position.set(i * slatSep + slatSep / 2 - winWidth / 2, winHeight / 2, zOffset);
+            pivot.position.set((i * slatSep + slatSep / 2) - winWidth / 2, 0, zOffset);
             pivot.rotation.y = angleRad;
             pivot.add(slat);
             assembly.add(pivot);
@@ -1502,9 +1419,20 @@ function createRoller(winWidth, winHeight, params, color) {
     const rollerMesh = new THREE.Mesh(rollerGeom, material);
     rollerMesh.userData.surfaceType = SURFACE_TYPES.SHADING_DEVICE;
 
-    // The origin (0,0,0) of this assembly is the window's bottom-center.
-    const posX = (leftOpening - rightOpening) / 2;
-    const posY = bottomOpening + rollerHeight / 2;
+    // The origin (0,0,0) of this assembly is the window's center.
+    // Calculate roller center relative to window center.
+    // Window Bottom = -winHeight/2.
+    // Roller Bottom = Window Bottom + bottomOpening.
+    // Roller Center Y = Roller Bottom + rollerHeight/2.
+    //                = -winHeight/2 + bottomOpening + rollerHeight/2.
+
+    // Window Left = -winWidth/2.
+    // Roller Left = Window Left + leftOpening.
+    // Roller Center X = Roller Left + rollerWidth/2.
+    //                = -winWidth/2 + leftOpening + rollerWidth/2.
+
+    const posX = -winWidth / 2 + leftOpening + rollerWidth / 2;
+    const posY = -winHeight / 2 + bottomOpening + rollerHeight / 2;
     // Positioned inside the room (negative local Z is inward)
     const posZ = -distToGlass - (rollerThickness / 2);
 
@@ -1619,6 +1547,9 @@ export function applySurfaceTags(tagMap) {
 /**
  * Creates a shading device from an imported OBJ file.
  */
+/**
+ * Creates a shading device from an imported OBJ file.
+ */
 async function createImportedShading(params, color, orientation, index) {
     const { project } = await import('./project.js');
     const fileKey = `shading-obj-file-${orientation.toLowerCase()}`;
@@ -1643,7 +1574,7 @@ async function createImportedShading(params, color, orientation, index) {
         }
     });
 
-    // Apply transformations from UI
+    // Apply transformations from UI to the OBJECT (Local Offset/Rotation/Scale)
     objectGroup.position.set(params.position.x, params.position.y, params.position.z);
     objectGroup.rotation.set(
         THREE.MathUtils.degToRad(params.rotation.x),
@@ -1652,10 +1583,14 @@ async function createImportedShading(params, color, orientation, index) {
     );
     objectGroup.scale.set(params.scale.x, params.scale.y, params.scale.z);
 
-    // Add to our list for selection and gizmo control
+    // Create an anchor group to be placed at the window position
+    const anchor = new THREE.Group();
+    anchor.add(objectGroup);
+
+    // Add to our list for selection and gizmo control (Allowing user to edit the OFFSET)
     importedShadingObjects.push(objectGroup);
 
-    return objectGroup;
+    return anchor;
 }
 
 /**

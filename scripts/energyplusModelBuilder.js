@@ -2640,6 +2640,11 @@ function emitShadingReflectance(idf, shading = {}) {
  * Config: shading.windowShadingControls[]
  * Thin mapping; assumes fenestration surfaces exist/are named correctly.
  */
+/**
+ * WINDOW SHADING CONTROL
+ * Config: shading.windowShadingControls[]
+ * Thin mapping; assumes fenestration surfaces exist/are named correctly.
+ */
 function emitWindowShadingControls(idf, shading = {}, scheduleContext = {}) {
     const compact = scheduleContext.compact || {};
     const hasSchedule = (name) => {
@@ -2684,6 +2689,10 @@ function emitWindowShadingControls(idf, shading = {}, scheduleContext = {}) {
         const glareActive =
             c.glareControlIsActive === true ? 'Yes' : 'No';
 
+        const materialName = c.materialName ? sanitize(c.materialName) : '';
+        const slatControl = c.slatControl || ''; // FixedSlatAngle, ScheduledSlatAngle, BlockBeamSolar
+        const slatSchedule = c.slatSchedule && hasSchedule(c.slatSchedule) ? sanitize(c.slatSchedule) : '';
+
         const multiType =
             c.multipleSurfaceControlType ||
             (c.fenestrationSurfaceNames.length > 1 ? 'Group' : '');
@@ -2702,13 +2711,13 @@ function emitWindowShadingControls(idf, shading = {}, scheduleContext = {}) {
             `  ${glareActive},              !- Glare Control Is Active`
         );
         idf.push(
-            `  ,                           !- Shading Device Material or Construction Name`
+            `  ${materialName},            !- Shading Device Material or Construction Name`
         );
         idf.push(
-            `  ,                           !- Type of Slat Angle Control for Blinds`
+            `  ${slatControl},             !- Type of Slat Angle Control for Blinds`
         );
         idf.push(
-            `  ,                           !- Slat Angle Schedule Name`
+            `  ${slatSchedule},            !- Slat Angle Schedule Name`
         );
         idf.push(`  ,                           !- Setpoint 3`);
         idf.push(`  ,                           !- Setpoint 4`);

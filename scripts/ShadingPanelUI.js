@@ -741,35 +741,88 @@ export class ShadingPanelUI {
     renderShadingControlEditor(container, apertureId, shadingControl) {
         const hasControl = !!shadingControl;
         const control = hasControl ? shadingControl : {
+            shadingType: 'InteriorShade',
+            materialName: '',
             controlType: 'OnIfHighSolarOnWindow',
-            setpoint: 200,
-            schedule: ''
+            setpoint1: 200,
+            setpoint2: '',
+            scheduleName: '',
+            glareControlIsActive: false,
+            slatControl: 'FixedSlatAngle',
+            slatSchedule: ''
         };
+
+        // Fetch options from project metadata
+        const metadata = project.metadata?.energyPlusConfig || {};
+        const materials = metadata.materials || [];
+        const schedules = (metadata.schedules?.compact || []).map(s => s.name);
+
+        // Filter materials suitable for shading
+        const shadingMaterials = materials.filter(m =>
+            ['WindowMaterial:Shade', 'WindowMaterial:Blind', 'WindowMaterial:Screen'].includes(m.type)
+        ).map(m => m.fields?.Name);
+
+        // Shading Types
+        const shadingTypes = [
+            'InteriorShade', 'ExteriorShade', 'ExteriorScreen',
+            'InteriorBlind', 'ExteriorBlind', 'BetweenGlassShade',
+            'BetweenGlassBlind', 'SwitchableGlazing'
+        ];
+
+        // Control Types
+        const controlTypes = [
+            'AlwaysOn', 'AlwaysOff', 'OnIfScheduleAllows',
+            'OnIfHighSolarOnWindow', 'OnIfHighHorizontalSolar',
+            'OnIfHighOutdoorAirTemperature', 'OnIfHighZoneAirTemperature',
+            'OnIfHighGlare', 'MeetDaylightIlluminanceSetpoint'
+        ];
 
         container.innerHTML = `
             <div class="shading-control-editor space-y-4">
                 ${this.getSelectedApertureInfoHTML()}
                 
-                <label class="flex items-center cursor-pointer" for="control-enabled">
+                <label class="flex items-center cursor-pointer mb-2" for="control-enabled">
                     <input type="checkbox" id="control-enabled" ${hasControl ? 'checked' : ''}>
-                    <span class="ml-3 text-sm font-normal text-[--text-primary]">Enable Window Shading Control</span>
+                    <span class="ml-3 text-sm font-bold text-[--text-primary]">Enable Window Shading Control</span>
                 </label>
 
-                <div id="control-params" class="${hasControl ? '' : 'hidden'} space-y-4">
-                    ${this.createSelectInput('control-type', 'Control Type', control.controlType, [
-            { value: 'AlwaysOn', label: 'Always On' },
-            { value: 'AlwaysOff', label: 'Always Off' },
-            { value: 'OnIfScheduleAllows', label: 'On If Schedule Allows' },
-            { value: 'OnIfHighSolarOnWindow', label: 'On If High Solar On Window' },
-            { value: 'OnIfHighHorizontalSolar', label: 'On If High Horizontal Solar' },
-            { value: 'OnIfHighOutdoorAirTemperature', label: 'On If High Outdoor Temperature' },
-            { value: 'OnIfHighZoneAirTemperature', label: 'On If High Zone Temperature' },
-            { value: 'OnIfHighGlare', label: 'On If High Glare' }
-        ])}
-                    ${this.createRangeControlHTML('control-setpoint', 'Setpoint (W/m² or °C)', 0, 1000, control.setpoint, 10, '')}
-                    ${this.createTextInput('control-schedule', 'Schedule Name (optional)', control.schedule || '')}
+                <div id="control-params" class="${hasControl ? '' : 'hidden'} space-y-4 border-l-2 border-[--border-color] pl-4">
+                    
+                    ${this.createSelectInput('shading-type', 'Shading Type', control.shadingType, shadingTypes.map(t => ({ value: t, label: t })))}
 
-                    <div class="flex gap-2 mt-4">
+                    ${this.createSelectInput('material-name', 'Shading Material', control.materialName,
+            [{ value: '', label: '-- Select Material --' }, ...shadingMaterials.map(m => ({ value: m, label: m }))]
+        )}
+
+                    ${this.createSelectInput('control-type', 'Control Type', control.controlType, controlTypes.map(t => ({ value: t, label: t })))}
+
+                    <div class="grid grid-cols-2 gap-2">
+                        ${this.createTextInput('control-setpoint1', 'Setpoint 1 (W/m² / °C)', control.setpoint1 || '')}
+                        ${this.createTextInput('control-setpoint2', 'Setpoint 2 (Opt.)', control.setpoint2 || '')}
+                    </div>
+
+                    ${this.createSelectInput('control-schedule', 'Availability Schedule', control.scheduleName,
+            [{ value: '', label: '-- Always Available --' }, ...schedules.map(s => ({ value: s, label: s }))]
+        )}
+
+                     <label class="flex items-center cursor-pointer" for="glare-active">
+                        <input type="checkbox" id="glare-active" ${control.glareControlIsActive ? 'checked' : ''}>
+                        <span class="ml-2 text-sm text-[--text-secondary]">Glare Control Active</span>
+                    </label>
+
+                    <div id="blind-settings" class="hidden space-y-4 mt-2 p-3 bg-[--input-bg] rounded border border-[--border-color]">
+                         <div class="text-xs font-bold text-[--text-tertiary] uppercase mb-1">Blind Settings</div>
+                         ${this.createSelectInput('slat-control', 'Slat Angle Control', control.slatControl, [
+            { value: 'FixedSlatAngle', label: 'Fixed Slat Angle' },
+            { value: 'ScheduledSlatAngle', label: 'Scheduled Slat Angle' },
+            { value: 'BlockBeamSolar', label: 'Block Beam Solar' }
+        ])}
+                         ${this.createSelectInput('slat-schedule', 'Slat Angle Schedule', control.slatSchedule,
+            [{ value: '', label: '-- Select Schedule --' }, ...schedules.map(s => ({ value: s, label: s }))]
+        )}
+                    </div>
+
+                    <div class="flex gap-2 mt-6 pt-4 border-t border-[--border-color]">
                         <button id="save-control-btn" class="btn btn-primary flex-1">
                             Save Control
                         </button>
@@ -783,12 +836,18 @@ export class ShadingPanelUI {
             </div>
         `;
 
-        // Add range slider listeners
-        this.addRangeListeners(container);
+        // Logic to toggle blind settings visibility
+        const typeSelect = container.querySelector('#shading-type');
+        const blindSettings = container.querySelector('#blind-settings');
+        const updateBlindVisibility = () => {
+            const val = typeSelect.value || '';
+            blindSettings.classList.toggle('hidden', !val.includes('Blind'));
+        };
+        typeSelect.addEventListener('change', updateBlindVisibility);
+        updateBlindVisibility(); // init
 
         const enabledCheckbox = container.querySelector('#control-enabled');
         const paramsDiv = container.querySelector('#control-params');
-
         enabledCheckbox.addEventListener('change', () => {
             paramsDiv.classList.toggle('hidden', !enabledCheckbox.checked);
         });
@@ -1047,10 +1106,21 @@ export class ShadingPanelUI {
         }
 
         const control = {
-            controlType: document.getElementById('control-type')?.value || 'OnIfHighSolarOnWindow',
-            setpoint: parseFloat(document.getElementById('control-setpoint')?.value || 200),
-            schedule: document.getElementById('control-schedule')?.value || ''
+            shadingType: document.getElementById('shading-type')?.value,
+            materialName: document.getElementById('material-name')?.value,
+            controlType: document.getElementById('control-type')?.value,
+            setpoint1: parseFloat(document.getElementById('control-setpoint1')?.value) || 0,
+            setpoint2: document.getElementById('control-setpoint2')?.value ? parseFloat(document.getElementById('control-setpoint2')?.value) : null,
+            scheduleName: document.getElementById('control-schedule')?.value,
+            glareControlIsActive: document.getElementById('glare-active')?.checked,
+            slatControl: document.getElementById('slat-control')?.value,
+            slatSchedule: document.getElementById('slat-schedule')?.value
         };
+
+        if (control.shadingType && control.shadingType.includes('Blind') && !control.slatControl) {
+            alert('Please select a Slat Angle Control type for blinds.');
+            return;
+        }
 
         let config = this.apertureDevices.get(apertureId) || { apertureId, overhangs: [], fins: [], shadingControl: null };
         config.shadingControl = control;
